@@ -14,6 +14,8 @@ RINGING_TONE  = 'precise_tone_plan/ringing_tone_440_480_cadence.wav'
 LOW_TONE      = 'precise_tone_plan/low_tone_480_620_cadence.wav' # busy/error tone
 HIGH_TONE     = 'precise_tone_plan/high_tone_480.wav'
 
+# Basic phone implements standard line tones and classical rotary phone logic. Methods
+# Can be overridden as required.
 class BasicPhone():
     def __init__(self, port, verbose):
         print("Loading audio files.")

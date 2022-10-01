@@ -14,6 +14,7 @@ verbose_debug = False
 
 AUDIO_PATH = 'audio'
 ELEVATOR_MUSIC = 'Elevator-music.wav'
+MUSIC = 'Last Ninja 1-1.wav'
 BEEPS = 'clock_sync_beeps.wav'
 SPEECH = 'The Matrix Agent Smith Monologue.wav'
 
@@ -21,20 +22,24 @@ SPEECH = 'The Matrix Agent Smith Monologue.wav'
 class PhoneDemo1(BasicPhone):
 
     def answer(self, number, elapsed):
-        if number == "810581":
-            if elapsed >= 10: # Answer after 10 seconds
-                return True
-        else:
-            if elapsed >= 4:
+        if number == "810581" and elapsed >= 10: # Answer after 10 seconds
+            return True
+        elif number == '888' and elapsed >= 6:
+            return True
+        elif elapsed >= 4:
                 return True
         return False
 
     def oncall(self, number):
         print("*** ONCALL", number)
         if number == "810581":
-            # Play elevator music in endless loop
+            # Play elevator music track in an endless loop
             elevator_music = soundfile.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
             sounddevice.play(elevator_music[0], elevator_music[1], loop=True)
+        elif number == "888":
+            # Play a track once
+            music = soundfile.read(os.path.join(AUDIO_PATH, MUSIC))
+            sounddevice.play(music[0], music[1], loop=False)
         else:
             # play few beeps and end the call
             beeps = soundfile.read(os.path.join(AUDIO_PATH, BEEPS))
