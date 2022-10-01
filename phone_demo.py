@@ -6,107 +6,19 @@ import serial.tools.list_ports
 import sounddevice
 import soundfile
 
-from telephonebox import Event, State, LineState
+from telephonebox import Event, State, LineState, Command
 import telephonebox as tb
-
-# Precise tone plan is a signaling specification for plain old telephone
-# system (PSTN) that defines the call progress tones used on line.
-AUDIO_PATH    ='./audio'
-DIAL_TONE     = 'precise_tone_plan/dialtone_350_440.wav'
-RINGING_TONE  = 'precise_tone_plan/ringing_tone_440_480_cadence.wav'
-LOW_TONE      = 'precise_tone_plan/low_tone_480_620_cadence.wav' # busy/error tone
-HIGH_TONE     = 'precise_tone_plan/high_tone_480.wav'
-
-ELEVATOR_MUSIC = 'Elevator-music.wav'
-BEEPS = 'clock_sync_beeps.wav'
+from basicphone import BasicPhone
 
 verbose_debug = False
 
-class BasicPhoneDemo():
-    def __init__(self, port):
-        print("Loading audio files.")
-        self.load_audio()
+AUDIO_PATH = 'audio'
+ELEVATOR_MUSIC = 'Elevator-music.wav'
+BEEPS = 'clock_sync_beeps.wav'
+SPEECH = 'The Matrix Agent Smith Monologue.wav'
 
-        print("Connecting...")
-        cc = tb.CommandConnection(verbose_debug)
-        cc.open_port(port)
-        self.driver = tb.Driver(cc, verbose=verbose_debug)
-        self.driver.connect()
-        print("Device initialized.")
-
-    def load_audio(self):
-        self.dial_tone = soundfile.read(os.path.join(AUDIO_PATH, DIAL_TONE))
-        self.ringing_tone = soundfile.read(os.path.join(AUDIO_PATH, RINGING_TONE))
-        self.low_tone = soundfile.read(os.path.join(AUDIO_PATH, LOW_TONE))
-
-    # Receive events from the driver and update status
-    def update(self):
-        (ev, params) = self.driver.receive()
-        if verbose_debug and ev != Event.NONE:
-            print(ev, params)
-        return (ev, params, self.driver.get_state())
-
-    def waitInState(self, theState):
-        while True:
-            (_, _, state) = self.update()
-            if state != theState:
-                return state
-
-    def idle(self):
-        print("*** IDLE (ONHOOK)")
-        self.waitInState(State.IDLE)
-
-    def wait(self):
-        print("*** WAIT (OFFHOOK)")
-        sounddevice.play(self.dial_tone[0], self.dial_tone[1], loop=True)
-        state = self.waitInState(State.WAIT)
-        sounddevice.stop()
-        if state == State.DIAL:
-            self.dial()
-
-    def dial(self):
-        print("*** DIAL")
-        timeout = time.time() + 8 # wait for 8 seconds the first digit
-        digits = []
-        while True:
-            (ev, params, state) = self.update()
-            if state == State.DIAL_ERROR:
-                self.dial_error()
-                break
-            elif self.driver.get_line_state() == LineState.ON_HOOK or self.driver.get_state() == State.IDLE:
-                # User hang up
-                break
-            elif time.time() > timeout:
-                if len(digits) == 0:
-                    # timeout and no number dialed
-                    self.dial_error()
-                else:
-                    self.ringing(''.join(digits))
-                break
-            elif ev == Event.DIAL:
-                print('Digit', params[0])
-                digits.append(params[0])
-                timeout = time.time() + 3 # 3 seconds for each digit
-                if len(digits) > 15:
-                    self.dial_error()
-                    break
-
-    def ringing(self, digits):
-        print("*** RINGING", digits)
-        ts = time.time()
-        sounddevice.play(self.ringing_tone[0], self.ringing_tone[1], loop=True)
-        while True:
-            (_, _, state) = self.update()
-            if state != State.WAIT:
-                break
-            if self.answer(digits, time.time() - ts):
-                sounddevice.stop()
-                time.sleep(1)
-                # Todo should play pickup crackle sound effect?
-                self.oncall(digits)
-                break
-
-        sounddevice.stop()
+# Implement few numbers that have distinct logic
+class PhoneDemo1(BasicPhone):
 
     def answer(self, number, elapsed):
         if number == "810581":
@@ -120,9 +32,11 @@ class BasicPhoneDemo():
     def oncall(self, number):
         print("*** ONCALL", number)
         if number == "810581":
+            # Play elevator music in endless loop
             elevator_music = soundfile.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
             sounddevice.play(elevator_music[0], elevator_music[1], loop=True)
         else:
+            # play few beeps and end the call
             beeps = soundfile.read(os.path.join(AUDIO_PATH, BEEPS))
             sounddevice.play(beeps[0], beeps[1], loop=False)
 
@@ -136,37 +50,82 @@ class BasicPhoneDemo():
 
         sounddevice.stop()
 
-    def dial_error(self):
-        print('*** DIAL-ERROR')
-        sounddevice.play(self.low_tone[0], self.low_tone[1], loop=True)
+# Rings the phone and plays a clip, then hangs up
+class PhoneDemo2(BasicPhone):
 
-        while True:
-            (_, _, state) = self.update()
-            # User must hang up to clear state
-            if state == State.IDLE:
-                break
-
-        sounddevice.stop()
+    def __init__(self, port, verbose_debug):
+        super().__init__(port, verbose_debug)
+        self.hasCalled = False
+        self.timeout = time.time() + 5
 
     def loop(self):
-        while True:
+        if not self.hasCalled:
+            # execute call after timer expires
             state = self.driver.get_state();
             if state == State.IDLE:
-                self.idle()
-            elif state == State.WAIT:
-                self.wait()
+                if(time.time() > self.timeout):
+                    self.call_out()
+                    self.hasCalled = True
             else:
                 self.update()
+                self.timeout = time.time() + 2
+        else: # already called, execute the default loop
+            super().loop()
 
-parser = argparse.ArgumentParser(description='Phone Demo #1')
+    def call_out(self):
+        print("*** CALL OUT")
+        self.driver.command(Command.RING) # Start ringing the phone
+        while True:
+            (ev, _, state) = self.update()
+            if ev == Event.RING_TRIP or state == State.WAIT:
+                self.ring_trip()
+                break
+            elif ev == Event.RING:
+                print("RING")
+            elif ev == Event.RING_PAUSE:
+                print("...")
+            elif state != State.RING or ev == Event.RING_TIMEOUT:
+                break
+
+    def ring_trip(self):
+        print("*** RING_TRIP")
+        # Wait until line exists the RING state
+        while True:
+            (_, _, state) = self.update()
+            if state != State.RING:
+                break
+        self.pickup()
+
+    def pickup(self):
+        print("*** PICK UP")
+        speech = soundfile.read(os.path.join(AUDIO_PATH, SPEECH))
+
+        # Delay so that user has had time to put handset on the ear.
+        answerdelay = time.time() + 3
+        while time.time() < answerdelay:
+            self.update()
+
+        sounddevice.play(speech[0], speech[1], loop=False)
+        while True:
+            (ev, _, state) = self.update()
+            if state != State.WAIT:
+                break
+            if not sounddevice.get_stream().active:
+                # audio completed, end the call
+                break
+        sounddevice.stop()
+
+
+parser = argparse.ArgumentParser(description='Phone Demos')
 parser.add_argument('--verbose', action='store_true', help='verbose mode')
+parser.add_argument('--demo', metavar='mode', default=1, type=int, help='Demo mode [1|2]')
 parser.add_argument('-p', '--port', metavar='port', help='Serial port')
 #parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
 args = parser.parse_args()
 
-verbose_debug = args.verbose
-
 port = None
+verbose_debug = args.verbose;
+
 if args.port:
     port = args.port
 else:
@@ -185,5 +144,13 @@ else:
     print("ERROR: No Device port found.")
     exit(1);
 
-demo = BasicPhoneDemo(port)
-demo.loop()
+if args.demo == 1:
+    print("Demo#1")
+    demo = PhoneDemo1(port, verbose_debug)
+elif args.demo == 2:
+    print("Demo#2")
+    demo = PhoneDemo2(port, verbose_debug)
+else:
+    raise Exception("Unknown demo", args.demo)
+while True:
+    demo.loop()
