@@ -2,10 +2,12 @@ import argparse
 import os
 import time
 import math
+import queue
 import serial.tools.list_ports
 
-import sounddevice
-import soundfile
+import sounddevice as sd
+import soundfile as sf
+import numpy
 
 from telephonebox import Event, State, LineState, Command
 import telephonebox as tb
@@ -25,7 +27,7 @@ def adjust_volume(soundfile, db: int):
     data *= math.pow(10, db/20) # multiply amplitude
 
 # Implement few numbers that have distinct logic
-class PhoneDemo1(BasicPhone):
+class PhoneCallDemo(BasicPhone):
 
     def answer(self, number, elapsed):
         if number == "810581" and elapsed >= 10: # Answer after 10 seconds
@@ -43,29 +45,29 @@ class PhoneDemo1(BasicPhone):
         time.sleep(2)
         if number == "810581":
             # Play elevator music track in an endless loop
-            elevator_music = soundfile.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
-            sounddevice.play(elevator_music[0], elevator_music[1], loop=True)
+            elevator_music = sf.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
+            sd.play(elevator_music[0], elevator_music[1], loop=True)
         elif number == "888":
             # Play a track once
-            music = soundfile.read(os.path.join(AUDIO_PATH, MUSIC))
-            sounddevice.play(music[0], music[1], loop=False)
+            music = sf.read(os.path.join(AUDIO_PATH, MUSIC))
+            sd.play(music[0], music[1], loop=False)
         else:
             # play few beeps and end the call
-            beeps = soundfile.read(os.path.join(AUDIO_PATH, BEEPS))
-            sounddevice.play(beeps[0], beeps[1], loop=False)
+            beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
+            sd.play(beeps[0], beeps[1], loop=False)
 
         while True:
             (_, _, state) = self.update()
             if state != State.WAIT:
                 break
-            if not sounddevice.get_stream().active:
+            if not sd.get_stream().active:
                 # audio completed, end the call
                 break
 
-        sounddevice.stop()
+        sd.stop()
 
 # Rings the phone and plays a clip, then hangs up
-class PhoneDemo2(BasicPhone):
+class PhoneRingingDemo(BasicPhone):
 
     def __init__(self, port, verbose_debug):
         super().__init__(port, verbose_debug)
@@ -114,7 +116,7 @@ class PhoneDemo2(BasicPhone):
     # Phone was picked up and line is stable
     def pickup(self):
         print("*** PICK UP")
-        speech = soundfile.read(os.path.join(AUDIO_PATH, SPEECH))
+        speech = sf.read(os.path.join(AUDIO_PATH, SPEECH))
         adjust_volume(speech, 10) # Make it louder by 10dB (twice as loud)
 
         # Delay so that user has had time to put handset on the ear.
@@ -122,15 +124,69 @@ class PhoneDemo2(BasicPhone):
         while time.time() < answerdelay:
             self.update()
 
-        sounddevice.play(speech[0], speech[1], loop=False)
+        sd.play(speech[0], speech[1], loop=False)
         while True:
             (ev, _, state) = self.update()
             if state != State.WAIT:
                 break
-            if not sounddevice.get_stream().active:
+            if not sd.get_stream().active:
                 # audio completed, end the call
                 break
-        sounddevice.stop()
+        sd.stop()
+
+# Implement sound record example
+class PhoneRecordDemo(BasicPhone):
+
+    def oncall(self, number):
+        print("*** ONCALL", number)
+
+        time.sleep(2)
+        # play few beeps first
+        beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
+        sd.play(beeps[0], beeps[1], loop=False)
+        sd.wait()
+
+        (_, _, state) = self.update()
+        if state != State.WAIT:
+            return
+
+        q = queue.Queue()
+
+        def callback(indata, frames, time, status):
+            """This is called (from a separate thread) for each audio block."""
+            if status:
+                print(status, file=sys.stderr)
+            q.put(indata.copy())
+
+        def flush(file):
+            """ Write received audio blocks to the record file """
+            try:
+                while True: file.write(q.get(False))
+            except queue.Empty:
+                pass
+
+        samplerate = 22050
+        channels = 1
+        subtype='PCM_16' # run soundfile.available_subtypes('WAV') for list of options
+        filename = 'rec_' + number + '.wav'
+        print("Recording to", filename)
+
+        # open soundfile and start recording until user hangs up
+        with sf.SoundFile(filename, mode='w', samplerate=samplerate,
+                          channels=1, subtype=subtype) as file:
+            istream = sd.InputStream(samplerate=samplerate, channels=1, callback=callback)
+            istream.start()
+            while True:
+                (_, _, state) = self.update()
+                if state != State.WAIT:
+                    break
+                flush(file)
+
+            istream.stop()
+            istream.close()
+            print("Recording stopped")
+
+        sd.stop()
 
 
 parser = argparse.ArgumentParser(description='Phone Demos')
@@ -162,11 +218,14 @@ else:
     exit(1);
 
 if args.demo == 1:
-    print("Demo#1")
-    demo = PhoneDemo1(port, verbose_debug)
+    print("Demo#1 Call handling")
+    demo = PhoneCallDemo(port, verbose_debug)
 elif args.demo == 2:
-    print("Demo#2")
-    demo = PhoneDemo2(port, verbose_debug)
+    print("Demo#2 Ringout")
+    demo = PhoneRingingDemo(port, verbose_debug)
+elif args.demo == 3:
+    print("Demo#3 Recording")
+    demo = PhoneRecordDemo(port, verbose_debug)
 else:
     raise Exception("Unknown demo", args.demo)
 while True:
