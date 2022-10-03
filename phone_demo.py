@@ -40,6 +40,7 @@ class PhoneDemo1(BasicPhone):
 
     def oncall(self, number):
         print("*** ONCALL", number)
+        time.sleep(2)
         if number == "810581":
             # Play elevator music track in an endless loop
             elevator_music = soundfile.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))

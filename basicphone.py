@@ -8,11 +8,13 @@ import telephonebox as tb
 
 # Precise tone plan is a signaling specification for plain old telephone
 # system (PSTN) that defines the call progress tones used on line.
-AUDIO_PATH    ='./audio/tones'
-DIAL_TONE     = 'euro/dialtone_europe_425.wav'
-RINGING_TONE  = 'euro/ringing_tone_europe_425_cadence.wav'
-LOW_TONE      = 'precise_tone_plan/low_tone_480_620_cadence.wav' # busy/error tone
-HIGH_TONE     = 'precise_tone_plan/high_tone_480.wav'
+AUDIO_PATH    ='./audio'
+DIAL_TONE     = 'tones/euro/dialtone_europe_425.wav'
+RINGING_TONE  = 'tones/euro/ringing_tone_europe_425_cadence.wav'
+LOW_TONE      = 'tones/precise_tone_plan/low_tone_480_620_cadence.wav' # busy/error tone
+HIGH_TONE     = 'tones/precise_tone_plan/high_tone_480.wav'
+PICKUP_EFFECT = 'phone_pickup.wav'
+HANGUP_EFFECT = 'phone_hangup.wav'
 
 # Basic phone implements standard line tones and classical rotary phone logic. Methods
 # Can be overridden as required.
@@ -33,6 +35,8 @@ class BasicPhone():
         self.dial_tone = soundfile.read(os.path.join(AUDIO_PATH, DIAL_TONE))
         self.ringing_tone = soundfile.read(os.path.join(AUDIO_PATH, RINGING_TONE))
         self.low_tone = soundfile.read(os.path.join(AUDIO_PATH, LOW_TONE))
+        self.pickup_effect = soundfile.read(os.path.join(AUDIO_PATH, PICKUP_EFFECT))
+        self.hangup_effect = soundfile.read(os.path.join(AUDIO_PATH, HANGUP_EFFECT))
 
     # Receive events from the driver and update status
     def update(self):
@@ -100,9 +104,12 @@ class BasicPhone():
                 break
             if self.answer(digits, time.time() - ts):
                 sounddevice.stop()
-                time.sleep(1)
-                # Todo should play pickup crackle sound effect?
+                # play pickup crackle sound effect
+                sounddevice.play(self.pickup_effect[0], self.pickup_effect[1], loop=False)
+                sounddevice.wait()
                 self.oncall(digits)
+                sounddevice.play(self.hangup_effect[0], self.hangup_effect[1], loop=False)
+                sounddevice.wait()
                 break
 
         sounddevice.stop()
@@ -114,6 +121,7 @@ class BasicPhone():
     # Phone is in call
     def oncall(self, number):
         print("*** ONCALL", number)
+        time.sleep(2)
         sounddevice.play(low_tone[0], low_tone[1], loop=True)
 
         while True:
