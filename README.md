@@ -5,7 +5,7 @@
 Interface library and test application for the Telephone Box Device.
 
 Telephone Box Device hardware implements a virtual telephone exchange interface for a classic vintage rotary phone. Arduno Nano controls the logic and exposes a serial interface for the application. Supply requirement: 12V 1A.
-Schematics, firmware source code and serial interface specification can be found here _TODO_.
+See [Schematics](firmware/schematics) and [Interface Specification](firmware/telephone_box/README.md)
 
 Package `telephonebox` is a low level interface for the Telephone Box serial interface.
 
@@ -15,9 +15,14 @@ Package `telephonebox` is a low level interface for the Telephone Box serial int
 
 ### Quickstart
 
-1. Install Python libraries [sounddevice](https://pypi.org/project/sounddevice/ "sounddevice") and [soundfile](https://pypi.org/project/soundfile/ "soundfile")
+1. Install Python libraries
+    [sounddevice](https://pypi.org/project/sounddevice)
+    [soundfile](https://pypi.org/project/soundfile)
+    [numpy](https://pypi.org/project/numpy/)
+    [serial](https://pypi.org/project/pyserial/)
+    [serial-tool](https://pypi.org/project/serial-tool/)
 2. Plugin in Telephone Box device power, usb and audio lines (out and mic)
-	(You may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html "CH340 driver") for Arduino Nano compatibility)
+	(You may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for Arduino Nano compatibility)
 3. Run demo script to start the default demo application.
 
 	```
