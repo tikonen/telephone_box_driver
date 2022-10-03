@@ -8,9 +8,9 @@ import telephonebox as tb
 
 # Precise tone plan is a signaling specification for plain old telephone
 # system (PSTN) that defines the call progress tones used on line.
-AUDIO_PATH    ='./audio'
-DIAL_TONE     = 'precise_tone_plan/dialtone_350_440.wav'
-RINGING_TONE  = 'precise_tone_plan/ringing_tone_440_480_cadence.wav'
+AUDIO_PATH    ='./audio/tones'
+DIAL_TONE     = 'euro/dialtone_europe_425.wav'
+RINGING_TONE  = 'euro/ringing_tone_europe_425_cadence.wav'
 LOW_TONE      = 'precise_tone_plan/low_tone_480_620_cadence.wav' # busy/error tone
 HIGH_TONE     = 'precise_tone_plan/high_tone_480.wav'
 
@@ -41,6 +41,7 @@ class BasicPhone():
             print(ev, params)
         return (ev, params, self.driver.get_state())
 
+    # Wait doing nothing until state changes
     def waitInState(self, theState):
         while True:
             (_, _, state) = self.update()
@@ -59,6 +60,8 @@ class BasicPhone():
         if state == State.DIAL:
             self.dial()
 
+    # Dialing has started. Wait for each digit and after no new digits have been
+    # received start a call
     def dial(self):
         print("*** DIAL")
         timeout = time.time() + 8 # wait for 8 seconds the first digit
@@ -81,11 +84,12 @@ class BasicPhone():
             elif ev == Event.DIAL:
                 print('Digit', params[0])
                 digits.append(params[0])
-                timeout = time.time() + 3 # 3 seconds for each digit
+                timeout = time.time() + 3 # wait 3 seconds for each digit
                 if len(digits) > 15:
                     self.dial_error()
                     break
 
+    # Play ringing tone until answer
     def ringing(self, digits):
         print("*** RINGING", digits)
         ts = time.time()
@@ -103,9 +107,11 @@ class BasicPhone():
 
         sounddevice.stop()
 
+    # Return true if call should be answered
     def answer(self, number, elapsed):
         return elapsed >= 10 # Answer after 10 seconds
 
+    # Phone is in call
     def oncall(self, number):
         print("*** ONCALL", number)
         sounddevice.play(low_tone[0], low_tone[1], loop=True)
@@ -117,6 +123,7 @@ class BasicPhone():
 
         sounddevice.stop()
 
+    # Some error in dialing, usually means user failed to use the rotary dial correctly.
     def dial_error(self):
         print('*** DIAL-ERROR')
         sounddevice.play(self.low_tone[0], self.low_tone[1], loop=True)

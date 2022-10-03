@@ -23,7 +23,7 @@ class Driver:
         self.ready = False # Ready to receive commands
         self.verbose = verbose
 
-    def connect(self, timeout=5):
+    def connect(self, timeout:float=5):
         self.ready = False
         timeout = time.time() + timeout
         self.conn.send_cmd('') # Send empty command to trigger READY response

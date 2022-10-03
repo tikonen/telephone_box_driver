@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+import math
 import serial.tools.list_ports
 
 import sounddevice
@@ -18,6 +19,11 @@ MUSIC = 'Last Ninja 1-1.wav'
 BEEPS = 'clock_sync_beeps.wav'
 SPEECH = 'The Matrix Agent Smith Monologue.wav'
 
+# multiply amplitude of sound data
+def adjust_volume(soundfile, db: int):
+    (data, samplerate) = soundfile
+    data *= math.pow(10, db/20) # multiply amplitude
+
 # Implement few numbers that have distinct logic
 class PhoneDemo1(BasicPhone):
 
@@ -26,6 +32,8 @@ class PhoneDemo1(BasicPhone):
             return True
         elif number == '888' and elapsed >= 6:
             return True
+        elif number == '911':
+            return False # Never answer
         elif elapsed >= 4:
                 return True
         return False
@@ -83,6 +91,7 @@ class PhoneDemo2(BasicPhone):
         while True:
             (ev, _, state) = self.update()
             if ev == Event.RING_TRIP or state == State.WAIT:
+                # Phone has been picked up
                 self.ring_trip()
                 break
             elif ev == Event.RING:
@@ -101,9 +110,11 @@ class PhoneDemo2(BasicPhone):
                 break
         self.pickup()
 
+    # Phone was picked up and line is stable
     def pickup(self):
         print("*** PICK UP")
         speech = soundfile.read(os.path.join(AUDIO_PATH, SPEECH))
+        adjust_volume(speech, 10) # Make it louder by 10dB (twice as loud)
 
         # Delay so that user has had time to put handset on the ear.
         answerdelay = time.time() + 3
