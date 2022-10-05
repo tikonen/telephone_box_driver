@@ -16,13 +16,12 @@ Package `telephonebox` is a low level interface for the Telephone Box serial int
 ### Quickstart
 
 1. Install Python libraries
-    [sounddevice](https://pypi.org/project/sounddevice)
-    [soundfile](https://pypi.org/project/soundfile)
-    [numpy](https://pypi.org/project/numpy/)
-    [serial](https://pypi.org/project/pyserial/)
-    [serial-tool](https://pypi.org/project/serial-tool/)
-2. Plugin in Telephone Box device power, usb and audio lines (out and mic)
-	(You may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for Arduino Nano compatibility)
+* [sounddevice](https://pypi.org/project/sounddevice)
+* [soundfile](https://pypi.org/project/soundfile)
+* [numpy](https://pypi.org/project/numpy/)
+* [serial](https://pypi.org/project/pyserial/)
+* [serial-tool](https://pypi.org/project/serial-tool/)
+2. Plugin in Telephone Box device power, usb and audio lines (out and mic). You may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for Arduino Nano compatibility.
 3. Run demo script to start the default demo application.
 
 	```
