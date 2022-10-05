@@ -39,7 +39,7 @@ class BasicPhone():
         self.hangup_effect = soundfile.read(os.path.join(AUDIO_PATH, HANGUP_EFFECT))
 
     # Receive events from the driver and update status
-    def update(self):
+    def update(self) -> (Event, list[str], State):
         (ev, params) = self.driver.receive()
         if self.verbose and ev != Event.NONE:
             print(ev, params)
@@ -96,8 +96,8 @@ class BasicPhone():
     # Play ringing tone until answer
     def ringing(self, digits):
         print("*** RINGING", digits)
-        ts = time.time()
         sounddevice.play(self.ringing_tone[0], self.ringing_tone[1], loop=True)
+        ts = time.time()
         while True:
             (_, _, state) = self.update()
             if state != State.WAIT:
@@ -108,17 +108,18 @@ class BasicPhone():
                 sounddevice.play(self.pickup_effect[0], self.pickup_effect[1], loop=False)
                 sounddevice.wait()
                 self.oncall(digits)
-                sounddevice.play(self.hangup_effect[0], self.hangup_effect[1], loop=False)
-                sounddevice.wait()
+                if self.driver.get_state() == State.WAIT: # Line is still open
+                    sounddevice.play(self.hangup_effect[0], self.hangup_effect[1], loop=False)
+                    sounddevice.wait()
                 break
 
         sounddevice.stop()
 
     # Return true if call should be answered
-    def answer(self, number, elapsed):
+    def answer(self, number, elapsed) -> bool:
         return elapsed >= 10 # Answer after 10 seconds
 
-    # Phone is in call
+    # Phone is in call.
     def oncall(self, number):
         print("*** ONCALL", number)
         time.sleep(2)

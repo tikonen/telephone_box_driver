@@ -29,11 +29,11 @@ def adjust_volume(soundfile, db: int):
 # Implement few numbers that have distinct logic
 class PhoneCallDemo(BasicPhone):
 
-    def answer(self, number, elapsed):
-        if number == "810581" and elapsed >= 10: # Answer after 10 seconds
-            return True
-        elif number == '888' and elapsed >= 6:
-            return True
+    def answer(self, number, elapsed) -> bool:
+        if number == "810581":
+            return elapsed >= 10 # Answer after 10 seconds
+        elif number == '888':
+            return elapsed >= 6
         elif number == '911':
             return False # Never answer
         elif elapsed >= 4:
@@ -77,13 +77,12 @@ class PhoneRingingDemo(BasicPhone):
     def loop(self):
         if not self.hasCalled:
             # execute call after timer expires
-            state = self.driver.get_state();
+            (_, _, state) = self.update()
             if state == State.IDLE:
                 if(time.time() > self.timeout):
                     self.call_out()
                     self.hasCalled = True
             else:
-                self.update()
                 self.timeout = time.time() + 2
         else: # already called, execute the default loop
             super().loop()
@@ -107,10 +106,7 @@ class PhoneRingingDemo(BasicPhone):
     def ring_trip(self):
         print("*** RING_TRIP")
         # Wait until line exists the RING state
-        while True:
-            (_, _, state) = self.update()
-            if state != State.RING:
-                break
+        self.waitInState(State.RING)
         self.pickup()
 
     # Phone was picked up and line is stable
@@ -133,6 +129,9 @@ class PhoneRingingDemo(BasicPhone):
                 # audio completed, end the call
                 break
         sd.stop()
+        if self.driver.get_state() == State.WAIT:
+            sd.play(self.hangup_effect[0], self.hangup_effect[1], loop=False)
+            sd.wait()
 
 # Implement sound record example
 class PhoneRecordDemo(BasicPhone):
@@ -153,7 +152,7 @@ class PhoneRecordDemo(BasicPhone):
         q = queue.Queue()
 
         def callback(indata, frames, time, status):
-            """This is called (from a separate thread) for each audio block."""
+            """Called (from a separate thread) for each audio block."""
             if status:
                 print(status, file=sys.stderr)
             q.put(indata.copy())
@@ -191,7 +190,7 @@ class PhoneRecordDemo(BasicPhone):
 
 parser = argparse.ArgumentParser(description='Phone Demos')
 parser.add_argument('--verbose', action='store_true', help='verbose mode')
-parser.add_argument('--demo', metavar='mode', default=1, type=int, help='Demo mode [1|2]')
+parser.add_argument('--demo', metavar='mode', default=1, type=int, help='Demo mode [1|2|3]')
 parser.add_argument('-p', '--port', metavar='port', help='Serial port')
 #parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
 args = parser.parse_args()
@@ -228,5 +227,6 @@ elif args.demo == 3:
     demo = PhoneRecordDemo(port, verbose_debug)
 else:
     raise Exception("Unknown demo", args.demo)
+
 while True:
     demo.loop()
