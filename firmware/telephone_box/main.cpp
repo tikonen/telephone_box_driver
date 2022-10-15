@@ -1,7 +1,5 @@
 #include <Arduino.h>
 
-#define VERSION "v0.1"
-
 #include "main.hpp"
 #include "serial_cmd.hpp"
 #include "printf.h"
@@ -163,9 +161,11 @@ void setup()
     pinMode(HB_OUT1_PIN, OUTPUT);
     pinMode(HB_OUT2_PIN, OUTPUT);
     pinMode(RING_EN_PIN, OUTPUT);
+    pinMode(PWM_PIN, OUTPUT);
     digitalWrite(HB_OUT1_PIN, LOW);
     digitalWrite(HB_OUT2_PIN, LOW);
     digitalWrite(RING_EN_PIN, LOW);
+    digitalWrite(PWM_PIN, LOW);
 
     pinMode(LSENSE_PIN, INPUT);
     analogReference(DEFAULT);  // 5V
@@ -378,6 +378,7 @@ void handle_state_ring(StateStage stage)
         digitalWrite(HB_OUT1_PIN, LOW);
         digitalWrite(HB_OUT2_PIN, LOW);
         digitalWrite(RING_EN_PIN, HIGH);
+        digitalWrite(PWM_PIN, HIGH);
         wait_ms(RELAY_DELAY_MS);  // let relay latch before starting ring AC generation
 
         ringState = true;
@@ -466,6 +467,7 @@ void handle_state_ring(StateStage stage)
         digitalWrite(HB_OUT1_PIN, LOW);
         digitalWrite(HB_OUT2_PIN, LOW);
         digitalWrite(RING_EN_PIN, LOW);
+        digitalWrite(PWM_PIN, LOW);
         // enablePollTimer(false);
         digitalWrite(LED_BUILTIN, LOW);
 

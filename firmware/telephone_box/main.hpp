@@ -1,5 +1,7 @@
 #pragma once
 
+#define VERSION "v0.2"
+
 // -----------------------
 // On-board Leds
 #define LED_YELLOW A1
@@ -18,6 +20,7 @@
 #define HB_OUT1_PIN 5
 #define HB_OUT2_PIN 6
 #define RING_EN_PIN A5
+#define PWM_PIN 9
 #define RELAY_DELAY_MS 50
 
 // Ringing parameters
