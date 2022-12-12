@@ -69,7 +69,7 @@ class Driver:
     def receive(self): # tuple of event and parameters
         line = self.conn.recv_cmd()
         if line:
-            line = line.split();
+            line = line.split()
             cmd = line[0]
             params = line[1:]
             return self.parse_and_process(cmd, params)
@@ -77,7 +77,7 @@ class Driver:
 
     def command(self, cmd: Command):
         if not self.is_ready():
-            return False;
+            return False
         self.ready = False
         # Send command
         self.conn.send_cmd(cmd.name)

@@ -21,12 +21,12 @@ MUSIC = 'Last Ninja 1-1.wav'
 BEEPS = 'clock_sync_beeps.wav'
 SPEECH = 'The Matrix Agent Smith Monologue.wav'
 
-# multiply amplitude of sound data
+# Increase audio volume
 def adjust_volume(soundfile, db: int):
     (data, samplerate) = soundfile
     data *= math.pow(10, db/20) # multiply amplitude
 
-# Implement few numbers that have distinct logic
+# Implement few numbers that have a distinct logic
 class PhoneCallDemo(BasicPhone):
 
     def answer(self, number, elapsed) -> bool:
@@ -42,7 +42,10 @@ class PhoneCallDemo(BasicPhone):
 
     def oncall(self, number):
         print("*** ONCALL", number)
+        
+        # Give time for user to settle the handset on ear
         time.sleep(2)
+
         if number == "810581":
             # Play elevator music track in an endless loop
             elevator_music = sf.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
@@ -56,6 +59,7 @@ class PhoneCallDemo(BasicPhone):
             beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
             sd.play(beeps[0], beeps[1], loop=False)
 
+        # Wait until track ends or the phone hangs up
         while True:
             (_, _, state) = self.update()
             if state != State.WAIT:
@@ -109,7 +113,7 @@ class PhoneRingingDemo(BasicPhone):
         self.waitInState(State.RING)
         self.pickup()
 
-    # Phone was picked up and line is stable
+    # Phone was picked up and the line is stable
     def pickup(self):
         print("*** PICK UP")
         speech = sf.read(os.path.join(AUDIO_PATH, SPEECH))
@@ -120,6 +124,7 @@ class PhoneRingingDemo(BasicPhone):
         while time.time() < answerdelay:
             self.update()
 
+        # start playing audio
         sd.play(speech[0], speech[1], loop=False)
         while True:
             (ev, _, state) = self.update()
@@ -129,6 +134,8 @@ class PhoneRingingDemo(BasicPhone):
                 # audio completed, end the call
                 break
         sd.stop()
+
+        # If still off-hook play hangup effect
         if self.driver.get_state() == State.WAIT:
             sd.play(self.hangup_effect[0], self.hangup_effect[1], loop=False)
             sd.wait()
@@ -145,6 +152,7 @@ class PhoneRecordDemo(BasicPhone):
         sd.play(beeps[0], beeps[1], loop=False)
         sd.wait()
 
+        # check if phone is still off-hook
         (_, _, state) = self.update()
         if state != State.WAIT:
             return
@@ -196,7 +204,7 @@ parser.add_argument('-p', '--port', metavar='port', help='Serial port')
 args = parser.parse_args()
 
 port = None
-verbose_debug = args.verbose;
+verbose_debug = args.verbose
 
 if args.port:
     port = args.port
@@ -214,7 +222,7 @@ if port:
     print ("Device port: ", port)
 else:
     print("ERROR: No Device port found.")
-    exit(1);
+    exit(1)
 
 if args.demo == 1:
     print("Demo#1 Call handling")

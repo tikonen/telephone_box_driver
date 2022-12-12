@@ -347,6 +347,8 @@ void handle_state_idle(StateStage stage)
 
 void handle_state_ring(StateStage stage)
 {
+    // TODO experiment with PWM drive Sine wave. See nano_pwm_dac example.
+
     static bool ringState = false;
 
     static Timer2 ringingTimeout(false, 30000);

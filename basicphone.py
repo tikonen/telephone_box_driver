@@ -52,10 +52,13 @@ class BasicPhone():
             if state != theState:
                 return state
 
+
+    # Phone is on-hook
     def idle(self):
         print("*** IDLE (ONHOOK)")
         self.waitInState(State.IDLE)
 
+    # Phone is off-hook and user is not dialing a number 
     def wait(self):
         print("*** WAIT (OFFHOOK)")
         sounddevice.play(self.dial_tone[0], self.dial_tone[1], loop=True)
@@ -115,11 +118,11 @@ class BasicPhone():
 
         sounddevice.stop()
 
-    # Return true if call should be answered
+    # Return true if a call to this number should be answered
     def answer(self, number, elapsed) -> bool:
         return elapsed >= 10 # Answer after 10 seconds
 
-    # Phone is in call.
+    # Phone is on call.
     def oncall(self, number):
         print("*** ONCALL", number)
         time.sleep(2)
@@ -132,7 +135,7 @@ class BasicPhone():
 
         sounddevice.stop()
 
-    # Some error in dialing, usually means user failed to use the rotary dial correctly.
+    # Some error in dialing, usually means user failed to operate the rotary dial correctly.
     def dial_error(self):
         print('*** DIAL-ERROR')
         sounddevice.play(self.low_tone[0], self.low_tone[1], loop=True)
@@ -146,7 +149,7 @@ class BasicPhone():
         sounddevice.stop()
 
     def loop(self):
-        state = self.driver.get_state();
+        state = self.driver.get_state()
         if state == State.IDLE:
             self.idle()
         elif state == State.WAIT:
