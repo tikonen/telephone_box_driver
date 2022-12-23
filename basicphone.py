@@ -26,7 +26,7 @@ class BasicPhone():
 
         print("Connecting...")
         cc = tb.CommandConnection(self.verbose)
-        cc.open_port(port)
+        cc.open_port(port, timeoutms=500)
         self.driver = tb.Driver(cc, verbose=self.verbose)
         self.driver.connect()
         print("Device initialized.")
@@ -64,8 +64,6 @@ class BasicPhone():
         sounddevice.play(self.dial_tone[0], self.dial_tone[1], loop=True)
         state = self.waitInState(State.WAIT)
         sounddevice.stop()
-        if state == State.DIAL:
-            self.dial()
 
     # Dialing has started. Wait for each digit and after no new digits have been
     # received start a call
@@ -154,5 +152,7 @@ class BasicPhone():
             self.idle()
         elif state == State.WAIT:
             self.wait()
+        elif state == State.DIAL:
+            self.dial()
         else:
             self.update()

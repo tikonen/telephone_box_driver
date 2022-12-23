@@ -195,46 +195,50 @@ class PhoneRecordDemo(BasicPhone):
 
         sd.stop()
 
+def main():
+	parser = argparse.ArgumentParser(description='Phone Demos')
+	parser.add_argument('--verbose', action='store_true', help='verbose mode')
+	parser.add_argument('--demo', metavar='mode', default=1, type=int, help='Demo mode [1|2|3]')
+	parser.add_argument('-p', '--port', metavar='port', help='Serial port')
+	#parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
+	args = parser.parse_args()
 
-parser = argparse.ArgumentParser(description='Phone Demos')
-parser.add_argument('--verbose', action='store_true', help='verbose mode')
-parser.add_argument('--demo', metavar='mode', default=1, type=int, help='Demo mode [1|2|3]')
-parser.add_argument('-p', '--port', metavar='port', help='Serial port')
-#parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
-args = parser.parse_args()
+	port = None
+	verbose_debug = args.verbose
 
-port = None
-verbose_debug = args.verbose
+	if args.port:
+		port = args.port
+	else:
+		if verbose_debug:
+			print("Serial ports:")
+		ports = list(serial.tools.list_ports.comports())
+		for p in ports:
+			if verbose_debug:
+				print("\t",p)
+			if "Arduino" in p.description or "CH340" in p.description:
+				port = p.device
 
-if args.port:
-    port = args.port
-else:
-    if verbose_debug:
-        print("Serial ports:")
-    ports = list(serial.tools.list_ports.comports())
-    for p in ports:
-        if verbose_debug:
-            print("\t",p)
-        if "Arduino" in p.description or "CH340" in p.description:
-            port = p.device
+	if port:
+		print ("Device port: ", port)
+	else:
+		print("ERROR: No Device port found.")
+		exit(1)
 
-if port:
-    print ("Device port: ", port)
-else:
-    print("ERROR: No Device port found.")
-    exit(1)
+	if args.demo == 1:
+		print("Demo#1 Call handling")
+		demo = PhoneCallDemo(port, verbose_debug)
+	elif args.demo == 2:
+		print("Demo#2 Ringout")
+		demo = PhoneRingingDemo(port, verbose_debug)
+	elif args.demo == 3:
+		print("Demo#3 Recording")
+		demo = PhoneRecordDemo(port, verbose_debug)
+	else:
+		raise Exception("Unknown demo", args.demo)
 
-if args.demo == 1:
-    print("Demo#1 Call handling")
-    demo = PhoneCallDemo(port, verbose_debug)
-elif args.demo == 2:
-    print("Demo#2 Ringout")
-    demo = PhoneRingingDemo(port, verbose_debug)
-elif args.demo == 3:
-    print("Demo#3 Recording")
-    demo = PhoneRecordDemo(port, verbose_debug)
-else:
-    raise Exception("Unknown demo", args.demo)
+	while True:
+		demo.loop()
+	
+if __name__ == '__main__':
+    main()
 
-while True:
-    demo.loop()

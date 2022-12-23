@@ -5,8 +5,8 @@ class CommandConnection:
         self.conn = None
         self.verbose = verbose
 
-    def open_port(self, port):
-        self.conn = serial.Serial(port, baudrate=57600, timeout=1)
+    def open_port(self, port, timeoutms):
+        self.conn = serial.Serial(port, baudrate=57600, timeout=timeoutms/1000)
 
     def debug_print(self, farg, *fargs):
         if self.verbose:
