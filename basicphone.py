@@ -46,12 +46,13 @@ class BasicPhone():
         return (ev, params, self.driver.get_state())
 
     # Wait doing nothing until state changes
-    def waitInState(self, theState):
+    def waitInState(self, theState, predicate=None):
         while True:
-            (_, _, state) = self.update()
+            (ev, _, state) = self.update()
             if state != theState:
                 return state
-
+            if predicate and not predicate():
+                return state
 
     # Phone is on-hook
     def idle(self):
@@ -126,10 +127,7 @@ class BasicPhone():
         time.sleep(2)
         sounddevice.play(low_tone[0], low_tone[1], loop=True)
 
-        while True:
-            (_, _, state) = self.update()
-            if state != State.WAIT:
-                break
+        self.waitInState(State.WAIT)
 
         sounddevice.stop()
 

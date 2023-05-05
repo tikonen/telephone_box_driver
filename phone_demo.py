@@ -10,7 +10,6 @@ import soundfile as sf
 import numpy
 
 from telephonebox import Event, State, LineState, Command
-import telephonebox as tb
 from basicphone import BasicPhone
 
 verbose_debug = False
@@ -37,12 +36,12 @@ class PhoneCallDemo(BasicPhone):
         elif number == '911':
             return False # Never answer
         elif elapsed >= 4:
-                return True
+            return True
         return False
 
     def oncall(self, number):
         print("*** ONCALL", number)
-        
+
         # Give time for user to settle the handset on ear
         time.sleep(2)
 
@@ -60,14 +59,7 @@ class PhoneCallDemo(BasicPhone):
             sd.play(beeps[0], beeps[1], loop=False)
 
         # Wait until track ends or the phone hangs up
-        while True:
-            (_, _, state) = self.update()
-            if state != State.WAIT:
-                break
-            if not sd.get_stream().active:
-                # audio completed, end the call
-                break
-
+        self.waitInState(State.WAIT, lambda: sd.get_stream().active)
         sd.stop()
 
 # Rings the phone and plays a clip, then hangs up
@@ -126,13 +118,8 @@ class PhoneRingingDemo(BasicPhone):
 
         # start playing audio
         sd.play(speech[0], speech[1], loop=False)
-        while True:
-            (ev, _, state) = self.update()
-            if state != State.WAIT:
-                break
-            if not sd.get_stream().active:
-                # audio completed, end the call
-                break
+        # wait until audio stops or the phone hangs up
+        self.waitInState(State.WAIT, lambda: sd.get_stream().active)
         sd.stop()
 
         # If still off-hook play hangup effect
@@ -171,6 +158,7 @@ class PhoneRecordDemo(BasicPhone):
                 while True: file.write(q.get(False))
             except queue.Empty:
                 pass
+            return True
 
         samplerate = 22050
         channels = 1
@@ -183,12 +171,7 @@ class PhoneRecordDemo(BasicPhone):
                           channels=1, subtype=subtype) as file:
             istream = sd.InputStream(samplerate=samplerate, channels=1, callback=callback)
             istream.start()
-            while True:
-                (_, _, state) = self.update()
-                if state != State.WAIT:
-                    break
-                flush(file)
-
+            self.waitInState(State.WAIT, lambda: flush(file))
             istream.stop()
             istream.close()
             print("Recording stopped")
