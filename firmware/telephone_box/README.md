@@ -1,15 +1,15 @@
 # Telephone box driver firmware.
 
 Firmware runs on an Arduino and controls a board for interfacing a classic rotary
-dial phone.
+dial phone. Serial parameters: 57600-8-N-1
 
 ## Led signals
 
-Yellow - On when phone Off-hook
-Red - On when phone is ringing
-Green - Solid: Device ready, Blinking: dial error and phone must be hang up to reset the error.
+* Yellow - On when phone Off-hook
+* Red - On when phone is ringing
+* Green - On: Device ready. Blinking: dial error and phone must be hang up to reset the error.
 
-Alternative blinking of Red and Green indicates self-test failure.
+Simultaneous alternate blinking of Red and Green indicates self-test failure.
 
 ## Serial command interface
 
@@ -52,7 +52,7 @@ States: IDLE
 **`\r\n`**
 Does nothing
 
-Response: None
+Response: None (just the `READY` prompt)
 States: Any
 
 
@@ -132,7 +132,7 @@ Current state of the device. Printed out on request and always when the state ch
 States: Any
 
 **`LINE <status>\r\n`**
-Current status of the line. ONHOOK, OFFHOOK, SHORT, -. Printed on request and on selected state changes.
+Current status of the line. (ONHOOK, OFFHOOK, SHORT). Printed on request and together with selected state changes.
 
 States: Any
 
@@ -158,7 +158,7 @@ Audio active.
 **`DIAL`**
 User has started to select a number. After selecting a digit the device returns to `WAIT` state.
 Stop playing line tone on first digit dial.
-Audio active but should not be used as it can confuse the logic counting dial pulses from the phone.
+Audio active and should not be used with high volume as it may confuse the logic counting the dial pulses from the phone.
 
 **`DIAL_ERROR`**
 Dialing failed. User must put phone back on-hook to reset the error.
