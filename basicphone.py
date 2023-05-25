@@ -39,7 +39,7 @@ class BasicPhone():
         self.hangup_effect = soundfile.read(os.path.join(AUDIO_PATH, HANGUP_EFFECT))
 
     # Receive events from the driver and update status
-    def update(self) -> (Event, list[str], State):
+    def update(self) -> tuple[Event, list[str], State]:
         (ev, params) = self.driver.receive()
         if self.verbose and ev != Event.NONE:
             print(ev, params)
@@ -125,7 +125,7 @@ class BasicPhone():
     def oncall(self, number):
         print("*** ONCALL", number)
         time.sleep(2)
-        sounddevice.play(low_tone[0], low_tone[1], loop=True)
+        sounddevice.play(self.low_tone[0], self.low_tone[1], loop=True)
 
         self.waitInState(State.WAIT)
 
