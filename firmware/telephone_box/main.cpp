@@ -21,7 +21,7 @@ enum LineState {
 
 // Voltage thresholds for line sense pin
 #define LSENSE_V_ONHOOK 0.1
-#define LSENSE_V_OFFHOOK 1.5
+#define LSENSE_V_OFFHOOK 1.2
 
 enum State {
     STATE_NONE = 0,
@@ -48,42 +48,42 @@ static const char* lineStateToStr(LineState state)
 }
 
 enum StateStage { ENTER, EXECUTE, LEAVE };
-volatile LineState lineState = LINE_STATE_UNKNOWN;
-static State state = STATE_INITIAL;
-static State lastState = STATE_NONE;
+static LineState sLineState = LINE_STATE_UNKNOWN;
+static State sState = STATE_INITIAL;
+static State sLastState = STATE_NONE;
 
 void _putchar(char character) { serial_write_char(character); }
 
 #define serial_printf(format, ...) printf(format SER_EOL, ##__VA_ARGS__)
 #define serial_print(str) serial_write_line(str)
 
-#define test_button() (!digitalRead(TEST_BUTTON_PIN))
+#define test_button() (digitalRead(TEST_BUTTON_PIN) == LOW)
 
 static const char* stateToStr()
 {
     const char* stateMap[] = {"-", "INIT", "IDLE", "RING", "WAIT", "DIAL", "DIAL2", "DIAL_ERROR", "TERMINAL"};
 
-    return stateMap[state];
+    return stateMap[sState];
 }
 
 bool setState(State newState)
 {
-    lastState = state;
-    state = newState;
+    sLastState = sState;
+    sState = newState;
 
-    if (lastState != state) {
+    if (sLastState != sState) {
         serial_printf("STATE %s", stateToStr());
     }
 }
 
 bool setLineState(LineState newState)
 {
-    LineState oldState = lineState;
-    lineState = newState;
+    LineState oldState = sLineState;
+    sLineState = newState;
 
-    digitalWrite(LED_YELLOW, lineState == LINE_STATE_OFF_HOOK);
+    digitalWrite(LED_YELLOW_PIN, sLineState == LINE_STATE_OFF_HOOK);
 
-    return oldState != lineState;
+    return oldState != sLineState;
 }
 
 static bool runSelfTest();
@@ -92,108 +92,55 @@ static struct Configuration {
     bool singleDigitDial = true;
 } configuration;
 
-/*
-static volatile bool ring_trip = false;
-
-// executed about 60 times per second to poll status of sense pins.
-// TODO: It would be better to implement this check as an interrupt but
-// the current pin may not support an interrupt
-static void pollTripStatus()
-{
-    if (!digitalRead(PSENSE_PIN)) {
-        // ring trip has triggered, disconnect ringing immediately.
-        digitalWrite(RING_EN_PIN, LOW);
-        ring_trip = true;
-        digitalWrite(LED_YELLOW, HIGH);
-    }
-}
-
-
-void configurePollTimer()
-{
-    // 8-bit Timer 2 in normal mode counts to 0xFF.
-    // Hz in milliseconds is
-    // f = F_CPU / (256 * prescaler)
-    // 1024 prescaler gives 61Hz, ~16.4ms period
-    TCCR2A = 0;
-    TCCR2B = _BV(CS22) | _BV(CS21) | _BV(CS20);  // 1024 prescaler
-}
-
-void enablePollTimer(bool enabled)
-{
-    if (enabled) {
-        TIMSK2 = _BV(TOIE2);  // Overflow interrupt enable
-    } else {
-        TIMSK2 &= ~_BV(TOIE2);  // Overflow interrupt disable
-    }
-}
-
-ISR(TIMER2_OVF_vect)
-{
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    // PORTB ^= _BV(5);  // Toggle pin 13 (LED_BUILTIN)
-    pollTripStatus();
-}
-*/
-
 void setup()
 {
-    pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(LED_RED, OUTPUT);
-    pinMode(LED_GREEN, OUTPUT);
-    pinMode(LED_YELLOW, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
-    digitalWrite(LED_RED, HIGH);
-    digitalWrite(LED_GREEN, HIGH);
-    digitalWrite(LED_YELLOW, HIGH);
+    pinMode(LED_RED_PIN, OUTPUT);
+    pinMode(LED_YELLOW_PIN, OUTPUT);
+    digitalWrite(LED_RED_PIN, HIGH);
+    digitalWrite(LED_YELLOW_PIN, HIGH);
     delay(500);
-    digitalWrite(LED_BUILTIN, LOW);
-    digitalWrite(LED_RED, LOW);
-    digitalWrite(LED_GREEN, LOW);
-    digitalWrite(LED_YELLOW, LOW);
+    digitalWrite(LED_RED_PIN, LOW);
+    digitalWrite(LED_YELLOW_PIN, LOW);
 
     Serial.begin(57600);
-    // serial_echo_loop();  // Debug serial command interface
 
-    digitalWrite(LED_DEBUG, LOW);
     pinMode(TEST_BUTTON_PIN, INPUT_PULLUP);
 
-    pinMode(HB_OUT1_PIN, OUTPUT);
-    pinMode(HB_OUT2_PIN, OUTPUT);
-    pinMode(RING_EN_PIN, OUTPUT);
-    pinMode(PWM_PIN, OUTPUT);
-    digitalWrite(HB_OUT1_PIN, LOW);
-    digitalWrite(HB_OUT2_PIN, LOW);
-    digitalWrite(RING_EN_PIN, LOW);
-    digitalWrite(PWM_PIN, LOW);
+    pinMode(PPA_PIN, OUTPUT);
+    pinMode(PPB_PIN, OUTPUT);
+    pinMode(RELAY_EN_PIN, OUTPUT);
+    pinMode(POWER_DIS_PIN, OUTPUT);
 
-    pinMode(LSENSE_PIN, INPUT);
-    analogReference(DEFAULT);  // 5V
-    analogRead(LSENSE_PIN);    // First analog read must be discarded
-    pinMode(PSENSE_PIN, INPUT);
+    digitalWrite(PPA_PIN, LOW);
+    digitalWrite(PPB_PIN, LOW);
+    digitalWrite(RELAY_EN_PIN, LOW);
+    digitalWrite(POWER_DIS_PIN, HIGH);
 
-    // configurePollTimer();
 
-    digitalWrite(LED_GREEN, HIGH);
+    pinMode(LINESENSE_PIN, INPUT);
+    analogReference(DEFAULT);   // 5V
+    analogRead(LINESENSE_PIN);  // First analog read must be discarded
+    pinMode(TRIPSENSE_PIN, INPUT);
+
     if (!runSelfTest()) {
         // Indicate problem by blinking leds
         while (true) {
             serial_print("ERROR");
-            digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
-            digitalWrite(LED_RED, !digitalRead(LED_RED));
+            // digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
+            digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
             delay(500);
         }
     }
 }
 
-bool isRingTrip() { return !digitalRead(PSENSE_PIN); }
+bool isRingTrip() { return digitalRead(TRIPSENSE_PIN) == HIGH; }
 
 LineState readLineState()
 {
     const float vref = 5.0f;
     const int amax = (1 << 10) - 1;
 
-    int lsense = analogRead(LSENSE_PIN);
+    int lsense = analogRead(LINESENSE_PIN);
     float v = (vref * lsense) / amax;
     if (v <= LSENSE_V_ONHOOK) return LINE_STATE_ON_HOOK;
     if (v <= LSENSE_V_OFFHOOK) return LINE_STATE_OFF_HOOK;
@@ -217,6 +164,9 @@ static bool runSelfTest()
 
     serial_printf("INFO Test Button: %d", test_button());
 
+    digitalWrite(RELAY_EN_PIN, HIGH);
+    delay(RELAY_DELAY_MS);
+
     LineState lineState = readLineState();
     serial_printf("INFO Line state: %s", lineStateToStr(lineState));
 
@@ -224,14 +174,13 @@ static bool runSelfTest()
     serial_printf("TEST Line sense: %s", lineSenseCheck ? "PASS" : "FAULT");
     pass = pass && lineSenseCheck;
 
-    digitalWrite(RING_EN_PIN, HIGH);
-    delay(100);
+    digitalWrite(RELAY_EN_PIN, LOW);
+    delay(RELAY_DELAY_MS);
+
     bool tripCheck = !isRingTrip();
     serial_printf("TEST Ring-trip: %s", tripCheck ? "PASS" : "FAIL");
 
     pass = pass && tripCheck;
-
-    digitalWrite(RING_EN_PIN, LOW);
 
     return pass;
 }
@@ -250,7 +199,7 @@ const char* serial_read_cmd()
             return NULL;
         } else if (!strcmp(cmd, "LINE")) {
             serial_print("OK");
-            serial_printf("LINE %s", lineStateToStr(lineState));
+            serial_printf("LINE %s", lineStateToStr(sLineState));
             serial_print("READY");
             return NULL;
         }
@@ -293,20 +242,24 @@ bool parse_and_apply_config(const char* conf)
 
 void handle_state_idle(StateStage stage)
 {
-    static Timer2 waitTimer(false, 200);
+    static Timer2 waitTimer(false, 100);
     uint32_t ts = millis();
 
     if (stage == ENTER) {
+        digitalWrite(PPA_PIN, HIGH);  // required for ring-trip detection
+        digitalWrite(PPB_PIN, LOW);
+        digitalWrite(RELAY_EN_PIN, LOW);
+        wait_ms(RELAY_DELAY_MS);  // let relay release
         serial_clear();
         serial_print("READY");
         waitTimer.reset(ts);
     }
 
     if (stage == EXECUTE) {
-        updateLineState();
+        bool ring_trip = isRingTrip();
 
         // Phone is off-hook
-        if (lineState == LINE_STATE_OFF_HOOK) {
+        if (ring_trip) {
             // Go the next state when line has been stable for a moment
             if (waitTimer.update(ts)) {
                 serial_print("LINE OFF_HOOK");
@@ -319,8 +272,9 @@ void handle_state_idle(StateStage stage)
 
         // Check test button press
         if (test_button()) {
+            delay(50);
             // wait until user releases button
-            while (!test_button())
+            while (test_button())
                 ;
             setState(STATE_RING);
             return;
@@ -343,53 +297,46 @@ void handle_state_idle(StateStage stage)
             serial_print("READY");
         }
     }
+
+    if (stage == LEAVE) {
+    }
 }
 
 void handle_state_ring(StateStage stage)
 {
-    // TODO experiment with PWM drive Sine wave. See nano_pwm_dac example.
-
     static bool ringState = false;
 
     static Timer2 ringingTimeout(false, 30000);
-    static Timer2 ringTime(false, RING_TIMEMS);
-    static Timer2 ringPauseTime(false, RING_PAUSEMS);
+    static Timer2 ringTime(false, RING_CADENCE_ON_MS);
+    static Timer2 ringPauseTime(false, RING_CADENCE_OFF_MS);
     static Timer2 ringHzTimer(true, 1000 / RING_FREQ_HZ / 2);
-    static Timer2 periodTimer(true, 1000 / RING_FREQ_HZ / 2 * RING_PWM_DUTY);
-    // static Timer2 ringTripTimer(false, 10);
 
     uint32_t ms = millis();
 
     if (stage == ENTER) {
-        // enablePollTimer(true);
-        updateLineState();
-
-        if (lineState != LINE_STATE_ON_HOOK) {
+        if (isRingTrip()) {
             setState(STATE_IDLE);
             return;
         }
+        digitalWrite(LED_RED_PIN, HIGH);
+        digitalWrite(PPB_PIN, HIGH);
+        digitalWrite(PPA_PIN, LOW);
+        digitalWrite(POWER_DIS_PIN, LOW);  // enable power for ring ac
+        delay(500);
 
         ringingTimeout.reset(ms);
         ringTime.reset(ms);
         ringPauseTime.reset(ms);
         ringHzTimer.reset(ms);
-        periodTimer.reset(ms);
 
         serial_print("READY");
 
-        digitalWrite(HB_OUT1_PIN, LOW);
-        digitalWrite(HB_OUT2_PIN, LOW);
-        digitalWrite(RING_EN_PIN, HIGH);
-        digitalWrite(PWM_PIN, HIGH);
-        wait_ms(RELAY_DELAY_MS);  // let relay latch before starting ring AC generation
-
         ringState = true;
         serial_print("RING");
-        // ringTripTimer.reset(ms);
     }
 
     if (stage == EXECUTE) {
-        bool ring_trip = !digitalRead(PSENSE_PIN);
+        bool ring_trip = isRingTrip();
         if (ring_trip) {
             // phone has been picked up
             serial_print("RING_TRIP");
@@ -397,19 +344,6 @@ void handle_state_ring(StateStage stage)
             setState(STATE_WAIT);
             return;
         }
-
-        /*
-        if (ring_trip) {
-            if (ringTripTimer.update(ms)) {
-                // phone has been picked up
-                serial_print("RING_TRIP");
-                setState(STATE_WAIT);
-                return;
-            }
-        } else {
-            ringTripTimer.reset(ms);
-        }
-        */
 
         // Read commands and execute
         if (const char* cmd = serial_read_cmd()) {
@@ -435,47 +369,34 @@ void handle_state_ring(StateStage stage)
             // phone is ringing
             if (ringTime.update(ms)) {
                 // ring cycle expired, go to wait time
-                digitalWrite(HB_OUT1_PIN, LOW);
-                digitalWrite(HB_OUT2_PIN, LOW);
-                digitalWrite(LED_RED, LOW);
+                digitalWrite(PPA_PIN, HIGH);
+                digitalWrite(PPB_PIN, LOW);
+                digitalWrite(LED_RED_PIN, HIGH);
                 ringState = 0;
                 serial_print("RING_PAUSE");
                 ringPauseTime.reset(ms);
             } else {
                 // ring cycle active
                 if (ringHzTimer.update(ms)) {
-                    digitalWrite(HB_OUT1_PIN, ringHzTimer.flipflop());
-                    digitalWrite(HB_OUT2_PIN, !ringHzTimer.flipflop());
-                    periodTimer.reset(ms);
+                    digitalWrite(PPA_PIN, !ringHzTimer.flipflop());
+                    digitalWrite(PPB_PIN, ringHzTimer.flipflop());
 
-                    digitalWrite(LED_RED, HIGH);
-                }
-                if (periodTimer.update(ms)) {
-                    // Period reached
-                    digitalWrite(HB_OUT1_PIN, LOW);
-                    digitalWrite(HB_OUT2_PIN, LOW);
-                    digitalWrite(LED_RED, LOW);
+                    digitalWrite(LED_RED_PIN, ringHzTimer.flipflop());
                 }
             }
         } else if (ringPauseTime.update(ms)) {
             ringState = true;
             serial_print("RING");
             ringTime.reset(ms);
+            ringHzTimer.reset();
         }
     }
 
     if (stage == LEAVE) {
-        digitalWrite(LED_RED, LOW);
-        digitalWrite(HB_OUT1_PIN, LOW);
-        digitalWrite(HB_OUT2_PIN, LOW);
-        digitalWrite(RING_EN_PIN, LOW);
-        digitalWrite(PWM_PIN, LOW);
-        // enablePollTimer(false);
-        digitalWrite(LED_BUILTIN, LOW);
-
-        // Wait a little so that the line state has time to stabilize
-        // after the relay opens
-        delay(RELAY_DELAY_MS);
+        digitalWrite(LED_RED_PIN, LOW);
+        digitalWrite(PPB_PIN, LOW);
+        digitalWrite(PPA_PIN, LOW);
+        digitalWrite(POWER_DIS_PIN, HIGH);
     }
 }
 
@@ -491,6 +412,8 @@ void discardCommands()
 void handle_state_wait(StateStage stage)
 {
     if (stage == ENTER) {
+        digitalWrite(RELAY_EN_PIN, HIGH);
+        wait_ms(RELAY_DELAY_MS);  // let relay latch
     }
 
     if (stage == EXECUTE) {
@@ -498,11 +421,11 @@ void handle_state_wait(StateStage stage)
         updateLineState();
 
         // Wait for the number dial in
-        if (lineState == LINE_STATE_ON_HOOK) {
+        if (sLineState == LINE_STATE_ON_HOOK) {
             serial_print("LINE ON_HOOK");
             setState(STATE_IDLE);
             return;
-        } else if (lineState == LINE_STATE_SHORT) {
+        } else if (sLineState == LINE_STATE_SHORT) {
             // dial begins
             if (configuration.singleDigitDial) {
                 setState(STATE_DIAL);
@@ -542,7 +465,7 @@ void handle_state_dial(StateStage stage)
                     // something is wrong, abort
                     setState(STATE_DIAL_ERROR);
                     state = DONE;
-                } else if (lineState == LINE_STATE_ON_HOOK) {
+                } else if (sLineState == LINE_STATE_ON_HOOK) {
                     // Number pulses begin
                     state = PULSES;
                 }
@@ -555,12 +478,12 @@ void handle_state_dial(StateStage stage)
                 int dialPulses = 0;
                 Timer2 numberTimeout(false, 200);  // timeout for individual digit
                 while (!numberTimeout.update()) {
-                    if (lineState == LINE_STATE_ON_HOOK && !pulseDetected) {
+                    if (sLineState == LINE_STATE_ON_HOOK && !pulseDetected) {
                         dialPulses++;
                         pulseDetected = true;
                         numberTimeout.reset();
                     }
-                    if (lineState == LINE_STATE_OFF_HOOK && pulseDetected) {
+                    if (sLineState == LINE_STATE_OFF_HOOK && pulseDetected) {
                         pulseDetected = false;
                     }
                     updateLineState();
@@ -618,13 +541,13 @@ void handle_state_dial2(StateStage stage)
                     // timeout
                     state = DONE;
                 }
-                if (lineState == LINE_STATE_ON_HOOK) {
+                if (sLineState == LINE_STATE_ON_HOOK) {
                     // user has closed the phone
                     serial_print("LINE ON_HOOK");
                     digits = 0;
                     state = DONE;
                 }
-                if (lineState == LINE_STATE_SHORT) {
+                if (sLineState == LINE_STATE_SHORT) {
                     // dial pulses are about to begin
                     pulseTimeout.reset();
                     state = PREPARE;
@@ -637,7 +560,7 @@ void handle_state_dial2(StateStage stage)
                     setState(STATE_DIAL_ERROR);
                     digits = -1;
                     state = DONE;
-                } else if (lineState == LINE_STATE_ON_HOOK) {
+                } else if (sLineState == LINE_STATE_ON_HOOK) {
                     // Number pulses begin
                     state = PULSES;
                 }
@@ -650,12 +573,12 @@ void handle_state_dial2(StateStage stage)
                 int dialPulses = 0;
                 Timer2 numberTimeout(false, 200);  // timeout for an individual digit
                 while (!numberTimeout.update()) {
-                    if (lineState == LINE_STATE_ON_HOOK && !pulseDetected) {
+                    if (sLineState == LINE_STATE_ON_HOOK && !pulseDetected) {
                         dialPulses++;
                         pulseDetected = true;
                         numberTimeout.reset();
                     }
-                    if (lineState == LINE_STATE_OFF_HOOK && pulseDetected) {
+                    if (sLineState == LINE_STATE_OFF_HOOK && pulseDetected) {
                         pulseDetected = false;
                     }
                     updateLineState();
@@ -694,7 +617,7 @@ void handle_state_dial2(StateStage stage)
     }
 }
 
-void handle_state_error(StateStage stage)
+void handle_state_dialerror(StateStage stage)
 {
     static Timer2 errorClearTimeout(false, 1000);
     static Timer2 blinkTimer(true, 200);
@@ -702,11 +625,12 @@ void handle_state_error(StateStage stage)
 
     if (stage == ENTER) {
         errorClearTimeout.reset(ts);
+        blinkTimer.reset(ts);
     }
 
     if (stage == EXECUTE) {
         if (blinkTimer.update(ts)) {
-            digitalWrite(LED_GREEN, blinkTimer.flipflop());
+            digitalWrite(LED_RED_PIN, blinkTimer.flipflop());
         }
 
         if (const char* cmd = serial_read_cmd()) {
@@ -719,7 +643,7 @@ void handle_state_error(StateStage stage)
             serial_print("READY");
         }
         updateLineState();
-        if (lineState == LINE_STATE_ON_HOOK) {
+        if (sLineState == LINE_STATE_ON_HOOK) {
             if (errorClearTimeout.update(ts)) {
                 // Reset back to idle state when line has been on hook for the required
                 // time.
@@ -732,7 +656,7 @@ void handle_state_error(StateStage stage)
     }
 
     if (stage == LEAVE) {
-        digitalWrite(LED_GREEN, HIGH);
+        // digitalWrite(LED_GREEN, HIGH);
     }
 }
 
@@ -741,9 +665,9 @@ void handle_state_terminal(StateStage stage)
     static bool linelog = false;
 
     if (stage == ENTER) {
-        digitalWrite(LED_GREEN, HIGH);
-        digitalWrite(LED_YELLOW, HIGH);
-        digitalWrite(LED_RED, HIGH);
+        // digitalWrite(LED_GREEN, HIGH);
+        digitalWrite(LED_YELLOW_PIN, HIGH);
+        digitalWrite(LED_RED_PIN, HIGH);
         serial_print("Testing terminal");
         serial_print(">");
         linelog = false;
@@ -752,7 +676,7 @@ void handle_state_terminal(StateStage stage)
         if (linelog) {
             // Log line state every time it changes
             if (updateLineState()) {
-                serial_printf("LINESTATE: %s", lineStateToStr(lineState));
+                serial_printf("LINESTATE: %s", lineStateToStr(sLineState));
             }
         }
 
@@ -762,19 +686,19 @@ void handle_state_terminal(StateStage stage)
         if (!strcmp(cmd, "HELP")) {
             serial_print("LINE");
             serial_print("LINELOG [1|0]");
-            serial_print("LED [Y|G|R]");
+            serial_print("LED [Y|R]");
             serial_print("RING");
-            serial_print("RING_EN [1|0]");
+            serial_print("RELAY_EN [1|0]");
             serial_print("EXIT");
             serial_print("HELP");
 
         } else if (!strcmp(cmd, "LINE")) {
             // Report line state
             updateLineState();
-            serial_printf("LINESTATE: %s", lineStateToStr(lineState));
-            int a = analogRead(LSENSE_PIN);
-            serial_printf("LSENSE: %u", a);
-            serial_printf("PSENSE: %u", digitalRead(PSENSE_PIN));
+            serial_printf("LINESTATE: %s", lineStateToStr(sLineState));
+            int a = analogRead(LINESENSE_PIN);
+            serial_printf("LINESENSE: %u", a);
+            serial_printf("TRIPSENSE: %u", digitalRead(TRIPSENSE_PIN));
         } else if (!strncmp(cmd, "LINELOG ", 8)) {
             // Toggle line state logging
             linelog = !linelog;
@@ -783,22 +707,22 @@ void handle_state_terminal(StateStage stage)
             // Toggle leds
             cmd += 4;
             if (!strncmp(cmd, "Y", 1)) {
-                digitalWrite(LED_YELLOW, !digitalRead(LED_YELLOW));
+                digitalWrite(LED_YELLOW_PIN, !digitalRead(LED_YELLOW_PIN));
             } else if (!strncmp(cmd, "R", 1)) {
-                digitalWrite(LED_RED, !digitalRead(LED_RED));
-            } else if (!strncmp(cmd, "G", 1)) {
-                digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
+                digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
+                //} else if (!strncmp(cmd, "G", 1)) {
+                //    digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
             } else {
                 serial_print("INVALID");
             }
         } else if (!strcmp(cmd, "RING")) {
             setState(STATE_RING);
             return;
-        } else if (!strncmp(cmd, "RING_EN ", 8)) {
-            // Enable or disable ring
+        } else if (!strncmp(cmd, "RELAY_EN ", 8)) {
+            // Enable or disable relay
             cmd += 8;
-            digitalWrite(RING_EN_PIN, atoi(cmd));
-            serial_printf("RING_EN: %u", digitalRead(RING_EN_PIN));
+            digitalWrite(RELAY_EN_PIN, atoi(cmd));
+            serial_printf("RELAY_EN: %u", digitalRead(RELAY_EN_PIN));
         } else if (!strcmp(cmd, "EXIT")) {
             setState(STATE_WAIT);
             return;
@@ -806,10 +730,10 @@ void handle_state_terminal(StateStage stage)
         serial_print(">");
     }
     if (stage == LEAVE) {
-        digitalWrite(LED_GREEN, HIGH);
-        digitalWrite(LED_YELLOW, LOW);
-        digitalWrite(LED_RED, LOW);
-        digitalWrite(RING_EN_PIN, LOW);
+        // digitalWrite(LED_GREEN, HIGH);
+        digitalWrite(LED_YELLOW_PIN, LOW);
+        digitalWrite(LED_RED_PIN, LOW);
+        digitalWrite(RELAY_EN_PIN, LOW);
     }
 }
 
@@ -838,19 +762,19 @@ StateHandler stateHandlers[] = {
     handle_state_wait,
     handle_state_dial,
     handle_state_dial2,
-    handle_state_error,
+    handle_state_dialerror,
     handle_state_terminal
 };
 // clang-format on
 
 void loop()
 {
-    if (lastState != state) {
-        State prevState = lastState;
-        lastState = state;
+    if (sLastState != sState) {
+        State prevState = sLastState;
+        sLastState = sState;
         stateHandlers[prevState](LEAVE);
-        stateHandlers[state](ENTER);
+        stateHandlers[sState](ENTER);
     } else {
-        stateHandlers[state](EXECUTE);
+        stateHandlers[sState](EXECUTE);
     }
 }
