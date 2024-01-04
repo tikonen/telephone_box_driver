@@ -21,20 +21,24 @@ BEEPS = 'clock_sync_beeps.wav'
 SPEECH = 'The Matrix Agent Smith Monologue.wav'
 
 # Increase audio volume
+
+
 def adjust_volume(soundfile, db: int):
     (data, samplerate) = soundfile
-    data *= math.pow(10, db/20) # multiply amplitude
+    data *= math.pow(10, db/20)  # multiply amplitude
 
 # Implement few numbers that have a distinct logic
+
+
 class PhoneCallDemo(BasicPhone):
 
     def answer(self, number, elapsed) -> bool:
         if number == "810581":
-            return elapsed >= 10 # Answer after 10 seconds
+            return elapsed >= 10  # Answer after 10 seconds
         elif number == '888':
             return elapsed >= 6
         elif number == '911':
-            return False # Never answer
+            return False  # Never answer
         elif elapsed >= 4:
             return True
         return False
@@ -63,6 +67,8 @@ class PhoneCallDemo(BasicPhone):
         sd.stop()
 
 # Rings the phone and plays a clip, then hangs up
+
+
 class PhoneRingingDemo(BasicPhone):
 
     def __init__(self, port, verbose_debug):
@@ -75,17 +81,17 @@ class PhoneRingingDemo(BasicPhone):
             # execute call after timer expires
             (_, _, state) = self.update()
             if state == State.IDLE:
-                if(time.time() > self.timeout):
+                if (time.time() > self.timeout):
                     self.call_out()
                     self.hasCalled = True
             else:
                 self.timeout = time.time() + 2
-        else: # already called, execute the default loop
+        else:  # already called, execute the default loop
             super().loop()
 
     def call_out(self):
         print("*** CALL OUT")
-        self.driver.command(Command.RING) # Start ringing the phone
+        self.driver.command(Command.RING)  # Start ringing the phone
         while True:
             (ev, _, state) = self.update()
             if ev == Event.RING_TRIP or state == State.WAIT:
@@ -109,7 +115,7 @@ class PhoneRingingDemo(BasicPhone):
     def pickup(self):
         print("*** PICK UP")
         speech = sf.read(os.path.join(AUDIO_PATH, SPEECH))
-        adjust_volume(speech, 10) # Make it louder by 10dB (twice as loud)
+        adjust_volume(speech, 10)  # Make it louder by 10dB (twice as loud)
 
         # Delay so that user has had time to put handset on the ear.
         answerdelay = time.time() + 3
@@ -128,6 +134,8 @@ class PhoneRingingDemo(BasicPhone):
             sd.wait()
 
 # Implement sound record example
+
+
 class PhoneRecordDemo(BasicPhone):
 
     def oncall(self, number):
@@ -155,21 +163,24 @@ class PhoneRecordDemo(BasicPhone):
         def flush(file):
             """ Write received audio blocks to the record file """
             try:
-                while True: file.write(q.get(False))
+                while True:
+                    file.write(q.get(False))
             except queue.Empty:
                 pass
             return True
 
         samplerate = 22050
         channels = 1
-        subtype='PCM_16' # run soundfile.available_subtypes('WAV') for list of options
+        # run soundfile.available_subtypes('WAV') for list of options
+        subtype = 'PCM_16'
         filename = 'rec_' + number + '.wav'
         print("Recording to", filename)
 
         # open soundfile and start recording until user hangs up
         with sf.SoundFile(filename, mode='w', samplerate=samplerate,
                           channels=1, subtype=subtype) as file:
-            istream = sd.InputStream(samplerate=samplerate, channels=1, callback=callback)
+            istream = sd.InputStream(
+                samplerate=samplerate, channels=1, callback=callback)
             istream.start()
             self.waitInState(State.WAIT, lambda: flush(file))
             istream.stop()
@@ -178,50 +189,56 @@ class PhoneRecordDemo(BasicPhone):
 
         sd.stop()
 
+
 def main():
-	parser = argparse.ArgumentParser(description='Phone Demos')
-	parser.add_argument('--verbose', action='store_true', help='verbose mode')
-	parser.add_argument('--demo', metavar='mode', default=1, type=int, help='Demo mode [1|2|3]')
-	parser.add_argument('-p', '--port', metavar='port', help='Serial port')
-	#parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
-	args = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Phone Demos')
+    parser.add_argument('--verbose', action='store_true', help='verbose mode')
+    parser.add_argument('--demo', metavar='mode', default=1,
+                        type=int, help='Demo mode [1|2|3]')
+    parser.add_argument('-p', '--port', metavar='port', help='Serial port')
+    # parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
+    args = parser.parse_args()
 
-	port = None
-	verbose_debug = args.verbose
+    port = None
+    verbose_debug = args.verbose
 
-	if args.port:
-		port = args.port
-	else:
-		if verbose_debug:
-			print("Serial ports:")
-		ports = list(serial.tools.list_ports.comports())
-		for p in ports:
-			if verbose_debug:
-				print("\t",p)
-			if "Arduino" in p.description or "CH340" in p.description:
-				port = p.device
+    if args.port:
+        port = args.port
+    else:
+        if verbose_debug:
+            print("Serial ports:")
+        ports = list(serial.tools.list_ports.comports())
+        for p in ports:
+            if verbose_debug:
+                print("\t", p)
+            if "Arduino" in p.description or "CH340" in p.description:
+                port = p.device
 
-	if port:
-		print ("Device port: ", port)
-	else:
-		print("ERROR: No Device port found.")
-		exit(1)
+    if port:
+        print("Device port: ", port)
+    else:
+        print("ERROR: No Device port found.")
+        exit(1)
 
-	if args.demo == 1:
-		print("Demo#1 Call handling")
-		demo = PhoneCallDemo(port, verbose_debug)
-	elif args.demo == 2:
-		print("Demo#2 Ringout")
-		demo = PhoneRingingDemo(port, verbose_debug)
-	elif args.demo == 3:
-		print("Demo#3 Recording")
-		demo = PhoneRecordDemo(port, verbose_debug)
-	else:
-		raise Exception("Unknown demo", args.demo)
+    if args.demo == 1:
+        print("Demo#1 Call handling")
+        demo = PhoneCallDemo(port, verbose_debug)
+    elif args.demo == 2:
+        print("Demo#2 Ringout")
+        demo = PhoneRingingDemo(port, verbose_debug)
+    elif args.demo == 3:
+        print("Demo#3 Recording")
+        demo = PhoneRecordDemo(port, verbose_debug)
+    else:
+        raise Exception("Unknown demo", args.demo)
 
-	while True:
-		demo.loop()
-	
+    try:
+        while True:
+            demo.loop()
+    except KeyboardInterrupt:
+        print("Exiting...")
+        pass
+
+
 if __name__ == '__main__':
     main()
-
