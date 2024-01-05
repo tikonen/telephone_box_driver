@@ -380,7 +380,6 @@ void handle_state_ring(StateStage stage)
                 if (ringHzTimer.update(ms)) {
                     digitalWrite(PPA_PIN, !ringHzTimer.flipflop());
                     digitalWrite(PPB_PIN, ringHzTimer.flipflop());
-
                     digitalWrite(LED_RED_PIN, ringHzTimer.flipflop());
                 }
             }
@@ -656,7 +655,6 @@ void handle_state_dialerror(StateStage stage)
     }
 
     if (stage == LEAVE) {
-        // digitalWrite(LED_GREEN, HIGH);
     }
 }
 
@@ -680,15 +678,31 @@ void handle_state_terminal(StateStage stage)
             }
         }
 
+        const struct {
+            const char* name;
+            uint8_t pin;
+            uint8_t flags;
+        } pinTable[] = {                                                                                     //
+            {"BUTTON", TEST_BUTTON_PIN, 0}, {"RELAY_EN", RELAY_EN_PIN, 1}, {"POWER_DIS", POWER_DIS_PIN, 1},  //
+            {"LED_YELLOW", LED_YELLOW_PIN, 1}, {"LED_RED", LED_RED_PIN, 1}};
+        const int pinCount = sizeof(pinTable) / sizeof(pinTable[0]);
+
         const char* cmd = serial_read_line();
         if (!cmd) return;
 
         if (!strcmp(cmd, "HELP")) {
             serial_print("LINE");
             serial_print("LINELOG [1|0]");
-            serial_print("LED [Y|R]");
             serial_print("RING");
-            serial_print("RELAY_EN [1|0]");
+            for (int i = 0; i < pinCount; i++) {
+                char buffer[32];
+                if (pinTable[i].flags) {
+                    snprintf(buffer, 32, "%s [1|0]", pinTable[i].name);
+                } else {
+                    strcpy(buffer, pinTable[i].name);
+                }
+                serial_printf("%s", buffer);
+            }
             serial_print("EXIT");
             serial_print("HELP");
 
@@ -697,42 +711,38 @@ void handle_state_terminal(StateStage stage)
             updateLineState();
             serial_printf("LINESTATE: %s", lineStateToStr(sLineState));
             int a = analogRead(LINESENSE_PIN);
-            serial_printf("LINESENSE: %u", a);
+            float v = (5.0f * a) / ((1 << 10) - 1);
+            serial_printf("LINESENSE: %u (%.2fV)", a, v);
             serial_printf("TRIPSENSE: %u", digitalRead(TRIPSENSE_PIN));
         } else if (!strncmp(cmd, "LINELOG ", 8)) {
             // Toggle line state logging
             linelog = !linelog;
             serial_printf("LINELOG: %d", linelog);
-        } else if (!strncmp(cmd, "LED ", 4)) {
-            // Toggle leds
-            cmd += 4;
-            if (!strncmp(cmd, "Y", 1)) {
-                digitalWrite(LED_YELLOW_PIN, !digitalRead(LED_YELLOW_PIN));
-            } else if (!strncmp(cmd, "R", 1)) {
-                digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
-                //} else if (!strncmp(cmd, "G", 1)) {
-                //    digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
-            } else {
-                serial_print("INVALID");
-            }
         } else if (!strcmp(cmd, "RING")) {
             setState(STATE_RING);
             return;
-        } else if (!strncmp(cmd, "RELAY_EN ", 8)) {
-            // Enable or disable relay
-            cmd += 8;
-            digitalWrite(RELAY_EN_PIN, atoi(cmd));
-            serial_printf("RELAY_EN: %u", digitalRead(RELAY_EN_PIN));
         } else if (!strcmp(cmd, "EXIT")) {
             setState(STATE_WAIT);
             return;
+        } else {
+            for (int i = 0; i < pinCount; i++) {
+                if (!strncmp(cmd, pinTable[i].name, strlen(pinTable[i].name))) {
+                    cmd += strlen(pinTable[i].name);
+                    if (*cmd && pinTable[i].flags) {
+                        digitalWrite(pinTable[i].pin, atoi(cmd));
+                    }
+                    serial_printf("%s: %u", pinTable[i].name, digitalRead(pinTable[i].pin));
+                    break;
+                }
+            }
         }
         serial_print(">");
     }
     if (stage == LEAVE) {
-        // digitalWrite(LED_GREEN, HIGH);
         digitalWrite(LED_YELLOW_PIN, LOW);
         digitalWrite(LED_RED_PIN, LOW);
+        digitalWrite(RELAY_EN_PIN, LOW);
+        digitalWrite(POWER_DIS_PIN, HIGH);
         digitalWrite(RELAY_EN_PIN, LOW);
     }
 }
