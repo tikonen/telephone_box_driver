@@ -60,6 +60,12 @@ struct Timer2 {
 
     void reset() { reset(millis()); }
 
+    void set(uint32_t timeout)
+    {
+        timer.interval = timeout;
+        reset();
+    }
+
     void reset(uint32_t ts)
     {
         timer.reset();

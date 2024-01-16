@@ -20,8 +20,8 @@ enum LineState {
 };
 
 // Voltage thresholds for line sense pin
-#define LSENSE_V_ONHOOK 0.1
-#define LSENSE_V_OFFHOOK 1.2
+#define LSENSE_ONHOOK_V 0.1
+#define LSENSE_OFFHOOK_V 1.2
 
 enum State {
     STATE_NONE = 0,
@@ -88,9 +88,16 @@ bool setLineState(LineState newState)
 
 static bool runSelfTest();
 
+#define DIAL_MODE_NONE 0
+#define DIAL_MODE_SINGLE 1
+#define DIAL_MODE_FULL 2
+
 static struct Configuration {
-    bool singleDigitDial = true;
-} configuration;
+    int dialMode = DIAL_MODE_SINGLE;
+    float onHookThreshold = LSENSE_ONHOOK_V;
+    float offHookThreshold = LSENSE_OFFHOOK_V;
+    int ringFreq = RING_FREQ_HZ;
+} config;
 
 void setup()
 {
@@ -124,11 +131,10 @@ void setup()
 
     if (!runSelfTest()) {
         // Indicate problem by blinking leds
-        while (true) {
-            serial_print("ERROR");
-            // digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
+        serial_print("WARN:-1");
+        for (int i = 0; i < 10; i++) {
             digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
-            delay(500);
+            delay(200);
         }
     }
 }
@@ -142,8 +148,8 @@ LineState readLineState()
 
     int lsense = analogRead(LINESENSE_PIN);
     float v = (vref * lsense) / amax;
-    if (v <= LSENSE_V_ONHOOK) return LINE_STATE_ON_HOOK;
-    if (v <= LSENSE_V_OFFHOOK) return LINE_STATE_OFF_HOOK;
+    if (v <= config.onHookThreshold) return LINE_STATE_ON_HOOK;
+    if (v <= config.offHookThreshold) return LINE_STATE_OFF_HOOK;
     return LINE_STATE_SHORT;
 }
 
@@ -161,7 +167,6 @@ static bool runSelfTest()
     delay(100);
 
     serial_printf("INFO Telephone box %s", VERSION);
-
     serial_printf("INFO Test Button: %d", test_button());
 
     digitalWrite(RELAY_EN_PIN, HIGH);
@@ -216,28 +221,59 @@ void handle_state_initial(StateStage stage)
     }
 }
 
+// Configuration keys
+//
+//  DM:<0|1>       int. Enable single digit dial (default)
+//  TON:<voltage>  float. On-hook threshold voltage level
+//  TOFF:<voltage> float. Off-hook threshold voltage level.
+//  HZ:<freq>      int. Ringing frequency
+//
 bool parse_and_apply_config(const char* conf)
 {
     if (*conf == '\0') {
         // print current configuration
-        serial_printf("CONF %s%d", "DM:", configuration.singleDigitDial);
-        return true;
-    } else if (*conf == ' ') {
-        conf++;
-        // Dial mode configuration
-        if (!strncmp(conf, "DM:", 3)) {
-            conf += 3;
+        serial_printf("CONF DM:%d TON:%.2fV TOFF:%.2fV HZ:%d", config.dialMode, config.onHookThreshold, config.offHookThreshold, config.ringFreq);
+    } else {
+        while (*conf == ' ') {
+            conf++;
             char* endptr = NULL;
-            int val = strtol(conf, &endptr, 10);
-            if (*endptr == '\0') {
-                serial_print("OK");
-                configuration.singleDigitDial = val;
-                return true;
+            if (!strncmp(conf, "DM:", 3)) {  // Dial mode configuration
+                conf += 3;
+                int val = strtol(conf, &endptr, 10);
+                if (*endptr != conf) {
+                    config.dialMode = val;
+                } else
+                    return false;
+            } else if (!strncmp(conf, "TON:", 4)) {  // On-hook threshold level
+                conf += 3;
+                float val = strtod(conf, &endptr);
+                if (*endptr != conf) {
+                    config.onHookThreshold = val;
+                } else
+                    return false;
+
+            } else if (!strncmp(conf, "TOF:", 4)) {  // Off-hook threshold level
+                conf += 3;
+                float val = strtod(conf, &endptr);
+                if (*endptr != conf) {
+                    config.offHookThreshold = val;
+                } else
+                    return false;
+            } else if (!strncmp(conf, "HZ:", 3)) {  // Ringing frequency
+                conf += 3;
+                int val = strtol(conf, &endptr, 10);
+                if (*endptr != conf) {
+                    config.ringFreq = val;
+                } else
+                    return false;
+            } else {
+                return false;
             }
+            conf = endptr;
         }
+        if (*conf != '\0') return false;
     }
-    serial_print("INVALID");
-    return false;
+    return true;
 }
 
 void handle_state_idle(StateStage stage)
@@ -276,6 +312,7 @@ void handle_state_idle(StateStage stage)
             // wait until user releases button
             while (test_button())
                 ;
+            delay(10);  // let button stabilize
             setState(STATE_RING);
             return;
         }
@@ -290,7 +327,11 @@ void handle_state_idle(StateStage stage)
                 setState(STATE_TERMINAL);
                 return;
             } else if (!strncmp(cmd, "CONF", 4)) {
-                parse_and_apply_config(cmd + 4);
+                if (parse_and_apply_config(cmd + 4)) {
+                    serial_print("OK");
+                } else {
+                    serial_print("INVALID");
+                }
             } else {
                 serial_print("INVALID");
             }
@@ -309,7 +350,7 @@ void handle_state_ring(StateStage stage)
     static Timer2 ringingTimeout(false, 30000);
     static Timer2 ringTime(false, RING_CADENCE_ON_MS);
     static Timer2 ringPauseTime(false, RING_CADENCE_OFF_MS);
-    static Timer2 ringHzTimer(true, 1000 / RING_FREQ_HZ / 2);
+    static Timer2 ringHzTimer(true, 1000 / config.ringFreq / 2);
 
     uint32_t ms = millis();
 
@@ -327,7 +368,7 @@ void handle_state_ring(StateStage stage)
         ringingTimeout.reset(ms);
         ringTime.reset(ms);
         ringPauseTime.reset(ms);
-        ringHzTimer.reset(ms);
+        ringHzTimer.set(1000 / config.ringFreq / 2);
 
         serial_print("READY");
 
@@ -336,6 +377,17 @@ void handle_state_ring(StateStage stage)
     }
 
     if (stage == EXECUTE) {
+        // Check test button press
+        if (test_button()) {
+            delay(50);
+            // wait until user releases button
+            while (test_button())
+                ;
+            delay(10);  // let button stabilize
+            setState(STATE_IDLE);
+            return;
+        }
+
         bool ring_trip = isRingTrip();
         if (ring_trip) {
             // phone has been picked up
@@ -426,10 +478,11 @@ void handle_state_wait(StateStage stage)
             return;
         } else if (sLineState == LINE_STATE_SHORT) {
             // dial begins
-            if (configuration.singleDigitDial) {
-                setState(STATE_DIAL);
-            } else {
-                setState(STATE_DIAL2);
+            switch (config.dialMode) {
+                case DIAL_MODE_SINGLE: setState(STATE_DIAL); break;
+                case DIAL_MODE_FULL: setState(STATE_DIAL2); break;
+                case DIAL_MODE_NONE:  // ignore
+                default: break;
             }
             return;
         }
@@ -655,6 +708,7 @@ void handle_state_dialerror(StateStage stage)
     }
 
     if (stage == LEAVE) {
+        digitalWrite(LED_RED_PIN, LOW);
     }
 }
 
@@ -764,7 +818,7 @@ void handle_state_none(StateStage stage)
 }
 
 // clang-format off
-StateHandler stateHandlers[] = {
+const StateHandler stateHandlers[] = {
     handle_state_none,
     handle_state_initial,
     handle_state_idle,

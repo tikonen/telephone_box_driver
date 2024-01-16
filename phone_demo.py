@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import time
 import math
 import queue
@@ -7,12 +8,15 @@ import serial.tools.list_ports
 
 import sounddevice as sd
 import soundfile as sf
-import numpy
 
 from telephonebox import Event, State, LineState, Command
 from basicphone import BasicPhone
+from dtfmphone import DTFMPhone
 
 verbose_debug = False
+
+# MODEL_LM_ERICSSON_DLG012 0
+# MODEL_LM_ERICSSON_DAHH1301 1
 
 AUDIO_PATH = 'audio'
 ELEVATOR_MUSIC = 'Elevator-music.wav'
@@ -170,7 +174,6 @@ class PhoneRecordDemo(BasicPhone):
             return True
 
         samplerate = 22050
-        channels = 1
         # run soundfile.available_subtypes('WAV') for list of options
         subtype = 'PCM_16'
         filename = 'rec_' + number + '.wav'
@@ -180,7 +183,7 @@ class PhoneRecordDemo(BasicPhone):
         with sf.SoundFile(filename, mode='w', samplerate=samplerate,
                           channels=1, subtype=subtype) as file:
             istream = sd.InputStream(
-                samplerate=samplerate, channels=1, callback=callback)
+                samplerate=samplerate, blocksize=0, channels=1, callback=callback)
             istream.start()
             self.waitInState(State.WAIT, lambda: flush(file))
             istream.stop()
@@ -194,7 +197,7 @@ def main():
     parser = argparse.ArgumentParser(description='Phone Demos')
     parser.add_argument('--verbose', action='store_true', help='verbose mode')
     parser.add_argument('--demo', metavar='mode', default=1,
-                        type=int, help='Demo mode [1|2|3]')
+                        type=int, help='Demo mode [1|2|3|4]')
     parser.add_argument('-p', '--port', metavar='port', help='Serial port')
     # parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
     args = parser.parse_args()
@@ -220,6 +223,18 @@ def main():
         print("ERROR: No Device port found.")
         exit(1)
 
+    # print audio devices
+    device = sd.query_devices(kind='output')
+    if device:
+        print(f'AUDIO OUTPUT: {device["name"]}')
+    else:
+        print("WARNING: No output audio device")
+    device = sd.query_devices(kind='input')
+    if device:
+        print(f'AUDIO INPUT: {device["name"]}')
+    else:
+        print("WARNING: No input audio device")
+
     if args.demo == 1:
         print("Demo#1 Call handling")
         demo = PhoneCallDemo(port, verbose_debug)
@@ -229,6 +244,9 @@ def main():
     elif args.demo == 3:
         print("Demo#3 Recording")
         demo = PhoneRecordDemo(port, verbose_debug)
+    elif args.demo == 4:
+        print("Demo#4 DTFM phone")
+        demo = DTFMPhone(port, verbose_debug)
     else:
         raise Exception("Unknown demo", args.demo)
 
