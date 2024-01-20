@@ -1,10 +1,18 @@
 import sys
 import os
+import argparse
 
-import dtfm
+import dtmf
 from goertzel import Goertzel
 
 import soundfile as sf
+
+verbosef = False
+
+
+def debug(n, *args, **kwargs):
+    if verbosef >= n:
+        print(*args, **kwargs)
 
 
 def resolvesymbol(gr, threshold):
@@ -12,15 +20,15 @@ def resolvesymbol(gr, threshold):
     # check what detectors found their target frequency
     for g in gr:
         p = g.power()
-        print(g.f, f'{p:2.2f}', end='')
+        debug(1, g.f, f'{p:2.2f}', end='')
         if p > threshold:
             freqs.append(g.f)
-            print(' *')
+            debug(1, ' *')
         else:
-            print()
+            debug(1, '')
     if len(freqs) == 2:
         # exactly two frequencies detected, find corresponding symbol
-        for e in dtfm.SYMBOLS:
+        for e in dtmf.SYMBOLS:
             if freqs[0] in e[1] and freqs[1] in e[1]:
                 # symbol found
                 (fl, fh) = e[1]
@@ -28,12 +36,46 @@ def resolvesymbol(gr, threshold):
                     f'SYMBOL:"{e[0]}"', f'({fl}Hz, {fh}Hz)')
                 return (True, e[0])
     else:
-        print("NO SYMBOL")
+        debug(1, "NO SYMBOL")
         return (False, 0)
 
 
+def compare_numbers(decoded_numbers):
+    # Expected numbers in the audio data
+    expected_numbers = [
+        '0696675356',
+        '4646415180',
+        '2336731416',
+        '3608338160',
+        '4400826146',
+        '6253689638',
+        '8482138178',
+        '5073643399'
+    ]
+    # Compare expected to the actually decoded numbers
+    for n in range(0, len(expected_numbers)):
+        if expected_numbers[n] != decoded_numbers[n]:
+            print("ERROR expected number %s does not match decoded %s" %
+                  (expected_numbers[n], decoded_numbers[n]))
+
+
 def main():
-    audiopath = sys.argv[1]
+
+    parser = argparse.ArgumentParser(description='DTMF detector')
+    parser.add_argument('-v', '--verbose', default=0,
+                        action='count', help='verbose mode')
+    # parser.add_argument('--test', action='store_true', help="Self-test")
+    # parser.add_argument('--demo', metavar='mode', default=1,
+    #                    type=int, help='Demo mode [1|2|3|4]')
+    # parser.add_argument('-p', '--port', metavar='port', help='Serial port')
+    # parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
+    parser.add_argument('audiofile')
+    args = parser.parse_args()
+
+    global verbosef
+    verbosef = args.verbose
+
+    audiopath = args.audiofile
     if not os.path.exists(audiopath):
         print(f'File not found: {audiopath}')
         return
@@ -41,23 +83,23 @@ def main():
     print(f'{audiopath} {len(data)/fs:.2f}s samplerate: {fs}Hz')
 
     # Number of useable samples depends on the sample rate. Higher sample rates give better accuracy.
-    N = int(0.9 * dtfm.TONE_TIME * fs)
+    N = int(0.9 * dtmf.TONE_TIME * fs)
 
     # Required goertzel detectors for each DTFM frequency
     gr = [
-        Goertzel(dtfm.FREQ_LOW1, N, fs),
-        Goertzel(dtfm.FREQ_LOW2, N, fs),
-        Goertzel(dtfm.FREQ_LOW3, N, fs),
-        Goertzel(dtfm.FREQ_LOW4, N, fs),
-        Goertzel(dtfm.FREQ_HIGH1, N, fs),
-        Goertzel(dtfm.FREQ_HIGH2, N, fs),
-        Goertzel(dtfm.FREQ_HIGH3, N, fs)
+        Goertzel(dtmf.FREQ_LOW1, N, fs),
+        Goertzel(dtmf.FREQ_LOW2, N, fs),
+        Goertzel(dtmf.FREQ_LOW3, N, fs),
+        Goertzel(dtmf.FREQ_LOW4, N, fs),
+        Goertzel(dtmf.FREQ_HIGH1, N, fs),
+        Goertzel(dtmf.FREQ_HIGH2, N, fs),
+        Goertzel(dtmf.FREQ_HIGH3, N, fs)
     ]
 
     envelope = 0
     signal = 0  # active signal start timestamp
     number = []  # dialed number
-    lastts = -dtfm.PAUSE_TIME  # last number found
+    lastts = -dtmf.PAUSE_TIME  # last number found
     # threshold = 5  # frequency detect treshold power
     envelopesample = 0
 
@@ -76,8 +118,9 @@ def main():
         if envelope >= 1.0:  # signal amplitude is strong enough
             if not signal:
                 interval = t - lastts  # only consider signal if enough time has passed since the last one
-                if interval > dtfm.PAUSE_TIME * 0.8:
-                    print(f'{t:.2f}s', "SIGNAL ON", f'{int(interval*1000)}ms')
+                if interval > dtmf.PAUSE_TIME * 0.8:
+                    debug(2, f'{t:.2f}s', "SIGNAL ON",
+                          f'{int(interval*1000)}ms')
                     signal = t
                     envelopesample = 0
                     for g in gr:  # reset goertzel detectors
@@ -85,10 +128,10 @@ def main():
         else:  # no signal detected
             if signal:
                 duration = t - signal
-                print(f'{t:.2f}s', "SIGNAL OFF", f'{int(duration*1000)}ms')
-                if duration > dtfm.TONE_TIME * 0.8:  # ignore if too short signal
-                    print(f'ENVELOPE {envelopesample:2.1f}')
-                    (detect, symbol) = resolvesymbol(gr, envelopesample)
+                debug(2, f'{t:.2f}s', "SIGNAL OFF", f'{int(duration*1000)}ms')
+                if duration > dtmf.TONE_TIME * 0.8:  # ignore if too short signal
+                    debug(1, f'ENVELOPE {envelopesample:2.1f}')
+                    (detect, symbol) = resolvesymbol(gr, envelopesample * 0.5)
                     if detect:
                         number.append(symbol)
                     lastts = t
@@ -107,22 +150,8 @@ def main():
     if len(number):
         addnumber()
 
-    # Expected numbers in the audio data
-    expected_numbers = [
-        '0696675356',
-        '4646415180',
-        '2336731416',
-        '3608338160',
-        '4400826146',
-        '6253689638',
-        '8482138178',
-        '5073643399'
-    ]
-    # Compare expected to the actually decoded numbers
-    for n in range(0, len(expected_numbers)):
-        if expected_numbers[n] != decoded_numbers[n]:
-            print("ERROR expected number %s does not match decoded %s" %
-                  (expected_numbers[n], decoded_numbers[n]))
+    # self test
+    # compare_numbers(decoded_numbers)
 
 
 if __name__ == "__main__":

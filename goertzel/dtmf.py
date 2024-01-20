@@ -1,5 +1,5 @@
 
-# DTFM low and high frequencies (Hz)
+# DTMF low and high frequencies (Hz)
 FREQ_LOW1 = 697
 FREQ_LOW2 = 770
 FREQ_LOW3 = 852

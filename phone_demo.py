@@ -11,7 +11,7 @@ import soundfile as sf
 
 from telephonebox import Event, State, LineState, Command
 from basicphone import BasicPhone
-from dtfmphone import DTFMPhone
+from dtmfphone import DTMFPhone
 
 verbose_debug = False
 
@@ -245,8 +245,8 @@ def main():
         print("Demo#3 Recording")
         demo = PhoneRecordDemo(port, verbose_debug)
     elif args.demo == 4:
-        print("Demo#4 DTFM phone")
-        demo = DTFMPhone(port, verbose_debug)
+        print("Demo#4 DTMF phone")
+        demo = DTMFPhone(port, verbose_debug)
     else:
         raise Exception("Unknown demo", args.demo)
 

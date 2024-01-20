@@ -1,28 +1,32 @@
 import sys
 
-from telephonebox import State
+from telephonebox import State, Command
 from basicphone import BasicPhone
 
 import sounddevice as sd
 import soundfile as sf
 import queue
 
-from goertzel import Goertzel, dtfm
+from goertzel import Goertzel, dtmf
 
 SAMPLERATE = 14400
+VERBOSE = 1
 # Number of useable samples depends on the sample rate. Higher sample rates give better accuracy.
-N = int(0.9 * dtfm.TONE_TIME * SAMPLERATE)
+N = int(0.9 * dtmf.TONE_TIME * SAMPLERATE)
 
-# Goertzel detector for each DTFM frequency
+# Goertzel detector for each DTMF frequency
 goertzels = [
-    Goertzel(dtfm.FREQ_LOW1, N, SAMPLERATE),
-    Goertzel(dtfm.FREQ_LOW2, N, SAMPLERATE),
-    Goertzel(dtfm.FREQ_LOW3, N, SAMPLERATE),
-    Goertzel(dtfm.FREQ_LOW4, N, SAMPLERATE),
-    Goertzel(dtfm.FREQ_HIGH1, N, SAMPLERATE),
-    Goertzel(dtfm.FREQ_HIGH2, N, SAMPLERATE),
-    Goertzel(dtfm.FREQ_HIGH3, N, SAMPLERATE)
+    Goertzel(dtmf.FREQ_LOW1, N, SAMPLERATE),
+    Goertzel(dtmf.FREQ_LOW2, N, SAMPLERATE),
+    Goertzel(dtmf.FREQ_LOW3, N, SAMPLERATE),
+    Goertzel(dtmf.FREQ_LOW4, N, SAMPLERATE),
+    Goertzel(dtmf.FREQ_HIGH1, N, SAMPLERATE),
+    Goertzel(dtmf.FREQ_HIGH2, N, SAMPLERATE),
+    Goertzel(dtmf.FREQ_HIGH3, N, SAMPLERATE)
 ]
+
+# DEBUG_RECORD='dtmf_demo_rec.wav'
+DEBUG_RECORD = None
 
 
 def resolvesymbol(threshold):
@@ -30,15 +34,15 @@ def resolvesymbol(threshold):
     # check what detectors found their target frequency
     for g in goertzels:
         p = g.power()
-        print(g.f, f'{p:2.2f}', end='')
+        dbgstr = f'{g.f} {p:2.2f}'
         if p > threshold:
             freqs.append(g.f)
-            print(' *')
-        else:
-            print()
+            dbgstr += ' *'
+        if VERBOSE:
+            print(dbgstr)
     if len(freqs) == 2:
         # exactly two frequencies detected, find corresponding symbol
-        for e in dtfm.SYMBOLS:
+        for e in dtmf.SYMBOLS:
             if freqs[0] in e[1] and freqs[1] in e[1]:
                 # symbol found
                 (fl, fh) = e[1]
@@ -50,13 +54,13 @@ def resolvesymbol(threshold):
         return (False, 0)
 
 
-class DTFMPhone(BasicPhone):
+class DTMFPhone(BasicPhone):
 
     def __init__(self, port, verbose):
         super().__init__(port, verbose)
 
-        # TODO configure dial mode to none
-        # self.driver.command(Command.CONF, {'DM':'0'})
+        # Configure dial mode to none
+        self.driver.command(Command.CONF, {'DM': 0})
 
     def key(self, symbol):
         print(f'KEY {symbol}')
@@ -76,10 +80,15 @@ class DTFMPhone(BasicPhone):
             q.put(indata.copy())
 
         ENVELOPE_THRESHOLD = 1.0
+        # For some reason Python sounddevice recorded audio is -6dB compared to e.g. Audacity 100% recording level.
+        # I suspect it's caused by forcing a mono recording from a stereo device. See https://github.com/PortAudio/portaudio/issues/397
+
+        # Increase gain if needed
+        GAIN = 1.0
 
         def process(data):  # process received audio blocks
             for s in data:
-                sample = s[0]
+                sample = s[0] * GAIN
                 process.ts += 1/SAMPLERATE  # timestamp
                 t = process.ts
                 # rough envelope detector
@@ -88,9 +97,10 @@ class DTFMPhone(BasicPhone):
                     if not process.signalts:
                         # only consider signal if enough time has passed since the last one
                         interval = t - process.lastts
-                        if interval > dtfm.PAUSE_TIME * 0.8:  # signal acquired
-                            print(f'{t:.2f}s', "SIGNAL ON",
-                                  f'{int(interval*1000)}ms')
+                        if interval > dtmf.PAUSE_TIME * 0.8:  # signal acquired
+                            if VERBOSE > 1:
+                                print(f'{t:.2f}s', "SIGNAL ON",
+                                      f'{int(interval*1000)}ms')
                             process.signalts = t
                             process.envelopesample = 0
                             for g in goertzels:  # reset goertzel detectors
@@ -98,12 +108,13 @@ class DTFMPhone(BasicPhone):
                 else:  # no signal detected
                     if process.signalts:  # signal lost
                         duration = t - process.signalts
-                        print(f'{t:.2f}s', "SIGNAL OFF",
-                              f'{int(duration*1000)}ms')
-                        if duration > dtfm.TONE_TIME * 0.8:  # ignore if too short signal
+                        if VERBOSE > 1:
+                            print(f'{t:.2f}s', "SIGNAL OFF",
+                                  f'{int(duration*1000)}ms')
+                        if duration > dtmf.TONE_TIME * 0.8:  # ignore if too short signal
                             print(f'ENVELOPE {process.envelopesample:2.1f}')
                             (detect, symbol) = resolvesymbol(
-                                process.envelopesample)
+                                process.envelopesample / 3)
                             if detect:
                                 self.key(symbol)
                                 # sd.stop()  # Stop playing dial tone
@@ -119,33 +130,38 @@ class DTFMPhone(BasicPhone):
 
         process.envelope = 0
         process.signalts = 0
-        process.lastts = -dtfm.PAUSE_TIME
+        process.lastts = -dtmf.PAUSE_TIME
         process.envelopesample = 0
         process.ts = 0
 
         subtype = 'PCM_16'
-        filename = 'dtfm_rec.wav'
-        print("Recording to", filename)
+        filename = DEBUG_RECORD
+        file = None
+        if filename:
+            print("Recording to", filename)
+            # open soundfile and start recording until user hangs up
+            file = sf.SoundFile(
+                filename, mode='w', samplerate=SAMPLERATE, channels=1, subtype=subtype)
 
-        # open soundfile and start recording until user hangs up
-        with sf.SoundFile(filename, mode='w', samplerate=SAMPLERATE,
-                          channels=1, subtype=subtype) as file:
+        # TODO adjust gain somehow
+        istream = sd.InputStream(
+            samplerate=SAMPLERATE, blocksize=0, channels=1, callback=callback)
+        istream.start()
 
-            istream = sd.InputStream(
-                samplerate=SAMPLERATE, blocksize=0, channels=1, callback=callback)
-            istream.start()
-
-            while True:
-                (ev, params, state) = self.update()
-                if state != State.WAIT:
-                    break
-                try:
-                    while True:
-                        data = q.get(False)
+        while True:
+            (ev, params, state) = self.update()
+            if state != State.WAIT:
+                break
+            try:
+                while True:
+                    data = q.get(False)
+                    if file:
                         file.write(data)
-                        process(data)
-                except queue.Empty:
-                    pass
-            istream.stop()
-            istream.close()
+                    process(data)
+            except queue.Empty:
+                pass
+        istream.stop()
+        istream.close()
+        if file:
+            file.close()
         sd.stop()

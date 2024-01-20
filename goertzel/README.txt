@@ -1,5 +1,5 @@
 
-Run script to detect DTFM numbers dialed in DTMF_dialing.ogg file
+Run script to detect DTMF numbers dialed in DTMF_dialing.ogg file
 
 $ python3 detect.py DTMF_Dialing_8kHz.ogg
 0.502s SIGNAL ON
