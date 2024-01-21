@@ -1,3 +1,4 @@
+from math import sin, pi
 
 # DTMF low and high frequencies (Hz)
 FREQ_LOW1 = 697
@@ -45,3 +46,11 @@ ALL_SYMBOLS = [  # 0, 1, ... 9, #, *, A, B, C, D
     ('#', (FREQ_LOW4, FREQ_HIGH3)),
     ('D', (FREQ_LOW4, FREQ_HIGH4))
 ]
+
+
+def tone(T, Fs, fl, fh):
+    N = int(T * Fs)
+    x = [0.5*sin(2*pi*fl*n/Fs) + 0.5*sin(2*pi*fh*n/Fs)
+         for n in range(0, N)]
+    t = [n/Fs for n in range(0, N)]
+    return (t, x, N)

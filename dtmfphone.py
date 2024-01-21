@@ -1,12 +1,11 @@
 import sys
-
-from telephonebox import State, Command
-from basicphone import BasicPhone
+import queue
 
 import sounddevice as sd
 import soundfile as sf
-import queue
 
+from telephonebox import State, Command
+from basicphone import BasicPhone
 from goertzel import Goertzel, dtmf
 
 SAMPLERATE = 14400
@@ -29,9 +28,8 @@ goertzels = [
 DEBUG_RECORD = None
 
 
-def open_recordfile():
+def open_recordfile(filename):
     subtype = 'PCM_16'
-    filename = DEBUG_RECORD
     if filename:
         print("Recording to", filename)
         # open soundfile and start recording until user hangs up
@@ -54,7 +52,8 @@ class DTMFPhone(BasicPhone):
     @staticmethod
     def resolvesymbol(threshold):
         freqs = []
-        # check what detectors found their target frequency
+        # check what detectors found their target frequency and match the found frequency pair
+        # to DTMF symbol.
         for g in goertzels:
             p = g.power()
             if p > threshold:
@@ -146,7 +145,7 @@ class DTMFPhone(BasicPhone):
         process.envelopesample = 0
         process.ts = 0
 
-        recordfile = open_recordfile()
+        recordfile = open_recordfile(DEBUG_RECORD)
 
         istream = sd.InputStream(
             samplerate=SAMPLERATE, blocksize=0, channels=1, callback=callback)

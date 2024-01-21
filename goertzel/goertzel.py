@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from math import sin, cos, pi
 
 
@@ -63,13 +62,8 @@ def goertzel(f, x, N, Fs):
 
 
 def main():
-    def generate(T, Fs, f1, f2):
-        N = int(T * Fs)
-        x = [0.5*sin(2*pi*f1*n/Fs) + 0.5*sin(2*pi*f2*n/Fs)
-             for n in range(0, N)]
-        # x = [0.5*sin(2*pi*1000*n/Fs) for n in range(0, N)]  # 1kHz test
-        t = [n/Fs for n in range(0, N)]
-        return (t, x, N)
+    import matplotlib.pyplot as plt
+    from dtmf import tone
 
     FREQ_LOW1 = 697
     FREQ_LOW2 = 770
@@ -95,7 +89,7 @@ def main():
     # t = [n/Fs for n in range(0, N)]
     f1 = FREQ_LOW2
     f2 = FREQ_HIGH2
-    (t, x, N) = generate(T, Fs, f1, f2)
+    (t, x, N) = tone(T, Fs, f1, f2)
     plt.figure(1)
     # plt.plot(t[:int(0.01*Fs)+1], x[:int(0.01*Fs)+1])
     plt.plot(t, x)
