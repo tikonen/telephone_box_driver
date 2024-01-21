@@ -25,7 +25,7 @@ Package `telephonebox` is a low level interface for the Telephone Box serial int
 3. Run demo script to start the default demo application.
 
 	```
-	C:\projects\telephone_box_driver>\Python37\python.exe phone_demo.py
+	C:\projects\telephone_box_driver>python.exe phone_demo.py call
 	Device port:  COM6
 	Demo#1 Call handling
 	Loading audio files.

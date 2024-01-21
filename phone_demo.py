@@ -194,25 +194,30 @@ class PhoneRecordDemo(BasicPhone):
 
 
 def main():
+    demohelp = """'call' Dialing and call handling,
+        'ring' Phone ringing,
+        'record' Voice recording and
+        'dtmf Dial Tone Multi Frequency decoding
+        """
     parser = argparse.ArgumentParser(description='Phone Demos')
-    parser.add_argument('--verbose', action='store_true', help='verbose mode')
-    parser.add_argument('--demo', metavar='mode', default=1,
-                        type=int, help='Demo mode [1|2|3|4]')
+    parser.add_argument('demo', help=demohelp, default='call')
+    parser.add_argument('-v', '--verbose', default=0,
+                        action='count', help='verbose mode')
     parser.add_argument('-p', '--port', metavar='port', help='Serial port')
-    # parser.add_argument('-c', '--cmd', nargs='+', metavar='CMD', required=True, help='Command list: LEFT, RIGHT or RESET')
     args = parser.parse_args()
 
     port = None
-    verbose_debug = args.verbose
+    verbose_level = args.verbose
 
     if args.port:
         port = args.port
     else:
-        if verbose_debug:
+        print("Finding PhoneBox")
+        if verbose_level:
             print("Serial ports:")
         ports = list(serial.tools.list_ports.comports())
         for p in ports:
-            if verbose_debug:
+            if verbose_level:
                 print("\t", p)
             if "Arduino" in p.description or "CH340" in p.description:
                 port = p.device
@@ -235,18 +240,18 @@ def main():
     else:
         print("WARNING: No input audio device")
 
-    if args.demo == 1:
+    if args.demo == 'call':
         print("Demo#1 Call handling")
-        demo = PhoneCallDemo(port, verbose_debug)
-    elif args.demo == 2:
+        demo = PhoneCallDemo(port, verbose_level)
+    elif args.demo == 'ring':
         print("Demo#2 Ringout")
-        demo = PhoneRingingDemo(port, verbose_debug)
-    elif args.demo == 3:
+        demo = PhoneRingingDemo(port, verbose_level)
+    elif args.demo == 'record':
         print("Demo#3 Recording")
-        demo = PhoneRecordDemo(port, verbose_debug)
-    elif args.demo == 4:
+        demo = PhoneRecordDemo(port, verbose_level)
+    elif args.demo == 'dtmf':
         print("Demo#4 DTMF phone")
-        demo = DTMFPhone(port, verbose_debug)
+        demo = DTMFPhone(port, verbose_level)
     else:
         raise Exception("Unknown demo", args.demo)
 

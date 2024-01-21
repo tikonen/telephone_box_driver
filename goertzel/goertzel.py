@@ -62,34 +62,33 @@ def goertzel(f, x, N, Fs):
     return P / N
 
 
-def generate(T, Fs, f1, f2):
-    N = int(T * Fs)
-    x = [0.5*sin(2*pi*f1*n/Fs) + 0.5*sin(2*pi*f2*n/Fs) for n in range(0, N)]
-    # x = [0.5*sin(2*pi*1000*n/Fs) for n in range(0, N)]  # 1kHz test
-    t = [n/Fs for n in range(0, N)]
-    return (t, x, N)
-
-
-FREQ_LOW1 = 697
-FREQ_LOW2 = 770
-FREQ_LOW3 = 852
-FREQ_LOW4 = 941
-FREQ_HIGH1 = 1209
-FREQ_HIGH2 = 1336
-FREQ_HIGH3 = 1477
-FREQ_HIGH4 = 1633
-
-Fs = 8000  # sample rate (Hz).
-# Sample rate must be at least 2 times the target frequency (Fs > 2 * f)
-T = 50e-3  # sample duration (s)
-# Optimal sample duration/sample size for a given target frequency and sample rate is
-# integer multiples of frequency divided by the sample rate
-T = FREQ_LOW2 / Fs * 2
-# N = T * Fs
-# Higher frequencies require longer sample time.
-
-
 def main():
+    def generate(T, Fs, f1, f2):
+        N = int(T * Fs)
+        x = [0.5*sin(2*pi*f1*n/Fs) + 0.5*sin(2*pi*f2*n/Fs)
+             for n in range(0, N)]
+        # x = [0.5*sin(2*pi*1000*n/Fs) for n in range(0, N)]  # 1kHz test
+        t = [n/Fs for n in range(0, N)]
+        return (t, x, N)
+
+    FREQ_LOW1 = 697
+    FREQ_LOW2 = 770
+    FREQ_LOW3 = 852
+    FREQ_LOW4 = 941
+    FREQ_HIGH1 = 1209
+    FREQ_HIGH2 = 1336
+    FREQ_HIGH3 = 1477
+    FREQ_HIGH4 = 1633
+
+    Fs = 8000  # sample rate (Hz).
+    # Sample rate must be at least 2 times the target frequency (Fs > 2 * f)
+    T = 50e-3  # sample duration (s)
+    # Optimal sample duration/sample size for a given target frequency and sample rate is
+    # integer multiples of frequency divided by the sample rate
+    T = FREQ_LOW2 / Fs * 2
+    # N = T * Fs
+    # Higher frequencies require longer sample time.
+
     # N = int(T * Fs)
     # x = [0.5*sin(2*pi*fl1*n/Fs) + 0.5*sin(2*pi*fh1*n/Fs) for n in range(0, N)]
     # x = [0.5*sin(2*pi*1000*n/Fs) for n in range(0, N)]  # 1kHz test
