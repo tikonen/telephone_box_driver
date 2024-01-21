@@ -108,7 +108,7 @@ class DTMFPhone(BasicPhone):
                         # only consider signal if enough time has passed since the last one
                         interval = t - process.lastts
                         if interval > dtmf.PAUSE_TIME * 0.8:  # signal acquired
-                            sd.stop()
+                            sd.stop()  # Stop playing dial tone
                             if VERBOSE > 1:
                                 print(f'{t:.2f}s', "SIGNAL ON",
                                       f'{int(interval*1000)}ms')
@@ -128,8 +128,8 @@ class DTMFPhone(BasicPhone):
                                 process.envelopesample / 3)
                             if symbol:
                                 self.key(symbol)
-                                # sd.stop()  # Stop playing dial tone
-                            process.lastts = t
+                            # process.lastts = t
+                            process.lastts = process.ts = 0
                         process.signalts = 0
                     continue
                 if process.signalts:
