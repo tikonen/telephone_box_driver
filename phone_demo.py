@@ -260,7 +260,6 @@ def main():
             demo.loop()
     except KeyboardInterrupt:
         print("Exiting...")
-        pass
 
 
 if __name__ == '__main__':
