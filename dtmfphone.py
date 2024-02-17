@@ -28,7 +28,7 @@ class DTMFPhone(BasicPhone):
         global VERBOSE
         VERBOSE = verbose
         # Configure dial mode to none
-        self.driver.command(Command.CONF, {'DM': 0})
+        self.config({'DM': 0})
 
     def key(self, symbol):
         sd.stop()

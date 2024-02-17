@@ -3,7 +3,7 @@ import sounddevice
 import soundfile
 import time
 
-from telephonebox import Event, State, LineState
+from telephonebox import Event, State, LineState, Command
 import telephonebox as tb
 
 # Precise tone plan is a signaling specification for plain old telephone
@@ -32,6 +32,9 @@ class BasicPhone():
         self.driver = tb.Driver(cc, verbose=self.verbose)
         self.driver.connect()
         print("Device initialized.")
+
+    def config(self, conf):
+        self.driver.command(Command.CONF, conf)
 
     def load_audio(self):
         self.dial_tone = soundfile.read(os.path.join(AUDIO_PATH, DIAL_TONE))

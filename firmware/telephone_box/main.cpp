@@ -49,7 +49,7 @@ static State sState = STATE_INITIAL;
 static State sLastState = STATE_NONE;
 
 // Voltage thresholds for line sense pin
-#define LSENSE_ONHOOK_V 0.1
+#define LSENSE_ONHOOK_V 0.07  // line sense should be around 50-200mV depending of the phone
 #define LSENSE_OFFHOOK_V 1.2
 
 #define DIAL_MODE_NONE 0
@@ -141,6 +141,7 @@ void setup()
 
 bool isRingTrip() { return digitalRead(TRIPSENSE_PIN) == HIGH; }
 
+static float sLineSenseVoltage;  // for debugging
 LineState readLineState()
 {
     const float vref = 5.0f;
@@ -148,6 +149,7 @@ LineState readLineState()
 
     int lsense = analogRead(LINESENSE_PIN);
     float v = (vref * lsense) / amax;
+    sLineSenseVoltage = v;
     if (v <= config.onHookThreshold) return LINE_STATE_ON_HOOK;
     if (v <= config.offHookThreshold) return LINE_STATE_OFF_HOOK;
     return LINE_STATE_SHORT;
@@ -223,7 +225,7 @@ void handle_state_initial(StateStage stage)
 
 // Configuration keys
 //
-//  DM:<0|1>       int. Enable single digit dial (default)
+//  DM:<n>         int. 0 disable, 1: single digit dial (default), 2: number dial
 //  TON:<voltage>  float. On-hook threshold voltage level
 //  TOFF:<voltage> float. Off-hook threshold voltage level.
 //  HZ:<freq>      int. Ringing frequency
@@ -477,7 +479,16 @@ void handle_state_wait(StateStage stage)
     }
 
     if (stage == EXECUTE) {
-        discardCommands();
+        if (const char* cmd = serial_read_cmd()) {
+            if (!strcmp(cmd, "TERMINAL")) {
+                setState(STATE_TERMINAL);
+                return;
+            } else {
+                serial_print("INVALID");
+            }
+            serial_print("READY");
+        }
+
         updateLineState();
 
         // Wait for the number dial in
@@ -723,7 +734,10 @@ void handle_state_dialerror(StateStage stage)
 
 void handle_state_terminal(StateStage stage)
 {
+    static Timer2 logTimer(true, 1000);
     static bool linelog = false;
+
+    uint32_t ts = millis();
 
     if (stage == ENTER) {
         // digitalWrite(LED_GREEN, HIGH);
@@ -732,12 +746,19 @@ void handle_state_terminal(StateStage stage)
         serial_print("Testing terminal");
         serial_print(">");
         linelog = false;
+        logTimer.reset(ts);
     }
     if (stage == EXECUTE) {
         if (linelog) {
             // Log line state every time it changes
             if (updateLineState()) {
-                serial_printf("LINESTATE: %s", lineStateToStr(sLineState));
+                serial_printf("LINESTATE: %s (%.2fV)", lineStateToStr(sLineState), sLineSenseVoltage);
+            }
+            // Report linesense every second
+            if (logTimer.update(ts)) {
+                int a = analogRead(LINESENSE_PIN);
+                float v = (5.0f * a) / ((1 << 10) - 1);
+                serial_printf("LINESENSE: %u (%.2fV)", a, v);
             }
         }
 
