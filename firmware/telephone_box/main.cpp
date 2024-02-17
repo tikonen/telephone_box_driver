@@ -497,14 +497,26 @@ void handle_state_wait(StateStage stage)
             setState(STATE_IDLE);
             return;
         } else if (sLineState == LINE_STATE_SHORT) {
-            // dial begins
-            switch (config.dialMode) {
-                case DIAL_MODE_SINGLE: setState(STATE_DIAL); break;
-                case DIAL_MODE_FULL: setState(STATE_DIAL2); break;
-                case DIAL_MODE_NONE:  // ignore
-                default: break;
+            // Rotary dial shorts the line when user starts winding the dial to the number
+
+            // Wait for a while to filter out sporadic shorts. These
+            // maybe triggered by users finger slipping of the rotary dial, DTMF and transistor
+            // phones current demand peaks etc.
+            Timer2 shortTimer(false, 150);
+            while (sLineState == LINE_STATE_SHORT) {
+                uint32_t ts = millis();
+                if (shortTimer.update(ts)) {
+                    // Line has been shorted for long enough. Dial begins
+                    switch (config.dialMode) {
+                        case DIAL_MODE_SINGLE: setState(STATE_DIAL); break;
+                        case DIAL_MODE_FULL: setState(STATE_DIAL2); break;
+                        case DIAL_MODE_NONE:  // ignore
+                        default: break;
+                    }
+                    return;
+                }
+                updateLineState();
             }
-            return;
         }
     }
 }
