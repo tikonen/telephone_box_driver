@@ -1,5 +1,6 @@
 import serial
 
+
 class CommandConnection:
     def __init__(self, verbose: bool = False):
         self.conn = None
@@ -19,7 +20,7 @@ class CommandConnection:
         self.conn.write(data)
 
     def recv_cmd(self) -> str:
-        data = self.conn.readline() # NOTE readline uses sole \n as a line separator
+        data = self.conn.readline()  # NOTE readline uses sole \n as a line separator
         if data:
             self.debug_print('< ', data)
             str = data.decode().strip('\r\n ')
