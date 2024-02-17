@@ -19,10 +19,6 @@ enum LineState {
     LINE_STATE_SHORT     // happens during dialing
 };
 
-// Voltage thresholds for line sense pin
-#define LSENSE_ONHOOK_V 0.1
-#define LSENSE_OFFHOOK_V 1.2
-
 enum State {
     STATE_NONE = 0,
     STATE_INITIAL,     // initializing
@@ -51,6 +47,21 @@ enum StateStage { ENTER, EXECUTE, LEAVE };
 static LineState sLineState = LINE_STATE_UNKNOWN;
 static State sState = STATE_INITIAL;
 static State sLastState = STATE_NONE;
+
+// Voltage thresholds for line sense pin
+#define LSENSE_ONHOOK_V 0.1
+#define LSENSE_OFFHOOK_V 1.2
+
+#define DIAL_MODE_NONE 0
+#define DIAL_MODE_SINGLE 1
+#define DIAL_MODE_FULL 2
+
+static struct Configuration {
+    int dialMode = DIAL_MODE_SINGLE;
+    float onHookThreshold = LSENSE_ONHOOK_V;
+    float offHookThreshold = LSENSE_OFFHOOK_V;
+    int ringFreq = RING_FREQ_HZ;
+} config;
 
 void _putchar(char character) { serial_write_char(character); }
 
@@ -87,17 +98,6 @@ bool setLineState(LineState newState)
 }
 
 static bool runSelfTest();
-
-#define DIAL_MODE_NONE 0
-#define DIAL_MODE_SINGLE 1
-#define DIAL_MODE_FULL 2
-
-static struct Configuration {
-    int dialMode = DIAL_MODE_SINGLE;
-    float onHookThreshold = LSENSE_ONHOOK_V;
-    float offHookThreshold = LSENSE_OFFHOOK_V;
-    int ringFreq = RING_FREQ_HZ;
-} config;
 
 void setup()
 {
@@ -351,8 +351,9 @@ void handle_state_ring(StateStage stage)
     static Timer2 ringTime(false, RING_CADENCE_ON_MS);
     static Timer2 ringPauseTime(false, RING_CADENCE_OFF_MS);
     static Timer2 ringHzTimer(true, 1000 / config.ringFreq / 2);
+    static Timer2 ringTripStabilizationTimer(false, RING_TRIP_STABILIZATION_DELAY_MS);
 
-    uint32_t ms = millis();
+    uint32_t ts = millis();
 
     if (stage == ENTER) {
         if (isRingTrip()) {
@@ -365,15 +366,18 @@ void handle_state_ring(StateStage stage)
         digitalWrite(POWER_DIS_PIN, LOW);  // enable power for ring ac
         delay(500);
 
-        ringingTimeout.reset(ms);
-        ringTime.reset(ms);
-        ringPauseTime.reset(ms);
+        ts = millis();
+        ringingTimeout.reset(ts);
+        ringTime.reset(ts);
+        ringPauseTime.reset(ts);
         ringHzTimer.set(1000 / config.ringFreq / 2);
+        ringTripStabilizationTimer.reset(ts);
 
         serial_print("READY");
 
         ringState = true;
         serial_print("RING");
+        return;
     }
 
     if (stage == EXECUTE) {
@@ -388,13 +392,16 @@ void handle_state_ring(StateStage stage)
             return;
         }
 
-        bool ring_trip = isRingTrip();
-        if (ring_trip) {
-            // phone has been picked up
-            serial_print("RING_TRIP");
-            serial_print("LINE OFF_HOOK");
-            setState(STATE_WAIT);
-            return;
+        if (ringTripStabilizationTimer.update(ts)) {
+            bool ring_trip = isRingTrip();
+
+            if (ring_trip) {
+                // phone has been picked up
+                serial_print("RING_TRIP");
+                serial_print("LINE OFF_HOOK");
+                setState(STATE_WAIT);
+                return;
+            }
         }
 
         // Read commands and execute
@@ -411,7 +418,7 @@ void handle_state_ring(StateStage stage)
             serial_print("READY");
         }
 
-        if (ringingTimeout.update(ms)) {
+        if (ringingTimeout.update(ts)) {
             serial_print("RING_TIMEOUT");
             setState(STATE_IDLE);
             return;
@@ -419,28 +426,29 @@ void handle_state_ring(StateStage stage)
 
         if (ringState) {
             // phone is ringing
-            if (ringTime.update(ms)) {
+            if (ringTime.update(ts)) {
                 // ring cycle expired, go to wait time
                 digitalWrite(PPA_PIN, HIGH);
                 digitalWrite(PPB_PIN, LOW);
                 digitalWrite(LED_RED_PIN, HIGH);
                 ringState = 0;
                 serial_print("RING_PAUSE");
-                ringPauseTime.reset(ms);
+                ringPauseTime.reset(ts);
             } else {
                 // ring cycle active
-                if (ringHzTimer.update(ms)) {
+                if (ringHzTimer.update(ts)) {
                     digitalWrite(PPA_PIN, !ringHzTimer.flipflop());
                     digitalWrite(PPB_PIN, ringHzTimer.flipflop());
                     digitalWrite(LED_RED_PIN, ringHzTimer.flipflop());
                 }
             }
-        } else if (ringPauseTime.update(ms)) {
+        } else if (ringPauseTime.update(ts)) {
             ringState = true;
             serial_print("RING");
-            ringTime.reset(ms);
+            ringTime.reset(ts);
             ringHzTimer.reset();
         }
+        return;
     }
 
     if (stage == LEAVE) {
@@ -448,6 +456,7 @@ void handle_state_ring(StateStage stage)
         digitalWrite(PPB_PIN, LOW);
         digitalWrite(PPA_PIN, LOW);
         digitalWrite(POWER_DIS_PIN, HIGH);
+        return;
     }
 }
 

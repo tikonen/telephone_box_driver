@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "v2.0"
+#define VERSION "v2.1"
 
 // -----------------------
 // On-board Leds
@@ -24,5 +24,9 @@
 #define RING_FREQ_HZ 25
 #define RING_CADENCE_ON_MS 2000
 #define RING_CADENCE_OFF_MS 2000
+
+// Trip sense circuit might give initially spurious trips before phone circuit and capacitors have
+// reached an stable operation point. Ignore trips for this long.
+#define RING_TRIP_STABILIZATION_DELAY_MS 200
 
 #define TEST_BUTTON_PIN 2
