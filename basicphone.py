@@ -34,7 +34,12 @@ class BasicPhone():
         print("Device initialized.")
 
     def config(self, conf):
-        self.driver.command(Command.CONF, conf)
+        if conf:
+            # Apply each configuration key separately
+            for kv in [{k: conf[k]} for k in conf]:
+                ret = self.driver.command(Command.CONF, kv)
+                if ret != Event.OK:
+                    raise Exception(f'Faild to set configuration key {kv}')
 
     def load_audio(self):
         self.dial_tone = soundfile.read(os.path.join(AUDIO_PATH, DIAL_TONE))

@@ -1,0 +1,14 @@
+# Model file
+# LM Ericsson DLN/DLG 1960's
+
+# Standard dial model
+DM:1
+
+# On-hook threshold voltage level as sensed by 47 Ohm resistor.
+TON: 0.15
+
+# Off-hook threshold voltage level as sensed by 47 Ohm resistor.
+TOFF: 1.5
+
+# Ringing frequency
+HZ:25

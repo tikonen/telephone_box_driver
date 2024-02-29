@@ -23,26 +23,38 @@ Rings phone until one of following conditions is true
 * Phone is picked up
 
 Response: `OK`
-States: IDLE
+<br>States: IDLE
 
 **`STOP\r\n`**
 
 Stop ringing the phone and return to IDLE state
 
 Response: `OK`
-States: RING
+<br>States: RING
 
 **`STATE\r\n`**
 Print current state
 
 Response: `STATE` _state_
-States: Any
+<br>States: Any
 
 **`LINE\r\n`**
 Print current line status
 
 Response: `LINE` _status_
-States: Any
+<br>States: Any
+
+**`CONF <param1> <param2> ...\r\n`**
+Board configuration.
+
+Parameters
+*  `DM:<n>`         int. 0 disable, 1: single digit dial (default)
+*  `TON:<voltage>`  float. On-hook threshold voltage level
+*  `TOFF:<voltage>` float. Off-hook threshold voltage level.
+*  `HZ:<freq>`      int. Ringing frequency
+
+Response: Current configuration when run without parameters
+<br>States: IDLE
 
 **`TERMINAL\r\n`**
 Debug terminal mode
@@ -53,8 +65,7 @@ States: IDLE
 Does nothing
 
 Response: None (just the `READY` prompt)
-States: Any
-
+<br>States: Any
 
 ### Prompts
 

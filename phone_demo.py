@@ -4,6 +4,7 @@ import sys
 import time
 import math
 import queue
+import re
 import serial.tools.list_ports
 
 import sounddevice as sd
@@ -193,6 +194,28 @@ class PhoneRecordDemo(BasicPhone):
         sd.stop()
 
 
+def load_model_config(model):
+    config = {}
+    if model:
+        print(f'Loading model configration {model}')
+        with open(model, 'rt') as file:
+            # matches: key:val
+            kvpre = re.compile(
+                r'^\s*(\w+)\s*:\s*([ -~]+)')
+            # matches: # comment
+            commentre = re.compile(r'^\s*#.*$')
+            for line in file.readlines():
+                line = line.strip()
+                # skip empty lines and comments
+                if line and not commentre.match(line):
+                    m = kvpre.match(line)
+                    if not m:
+                        raise Exception(f'Invalid configuration {line}')
+                    config[m[1]] = m[2]
+
+    return config
+
+
 def main():
     demohelp = """'call' Dialing and call handling,
         'ring' Phone ringing,
@@ -203,11 +226,17 @@ def main():
     parser.add_argument('demo', help=demohelp, default='call')
     parser.add_argument('-v', '--verbose', default=0,
                         action='count', help='verbose mode')
-    parser.add_argument('-p', '--port', metavar='port', help='Serial port')
+    parser.add_argument('-p', '--port', metavar='PORT', help='Serial port')
+    parser.add_argument(
+        '-m', '--model', metavar='FILE', help='Phone model file')
     args = parser.parse_args()
 
     port = None
     verbose_level = args.verbose
+
+    config = load_model_config(args.model)
+    if verbose_level:
+        print(config)
 
     if args.port:
         port = args.port
@@ -254,6 +283,9 @@ def main():
         demo = DTMFPhone(port, verbose_level)
     else:
         raise Exception("Unknown demo", args.demo)
+
+    # Load model definitions and configure
+    demo.config(config)
 
     try:
         while True:

@@ -26,7 +26,6 @@ enum State {
     STATE_RING,        // Ringing the phone
     STATE_WAIT,        // Phone is off-hook, wait for user to start dialing the number.
     STATE_DIAL,        // Dial started, wait for a number
-    STATE_DIAL2,       // Dial started, wait and receive full number
     STATE_DIAL_ERROR,  // dial fail, cleared by putting phone on-hook
     STATE_TERMINAL     // Debug and testing mode
 };
@@ -50,11 +49,10 @@ static State sLastState = STATE_NONE;
 
 // Voltage thresholds for line sense pin
 #define LSENSE_ONHOOK_V 0.07  // line sense should be around 50-200mV depending of the phone
-#define LSENSE_OFFHOOK_V 1.2
+#define LSENSE_OFFHOOK_V 1.5
 
 #define DIAL_MODE_NONE 0
 #define DIAL_MODE_SINGLE 1
-#define DIAL_MODE_FULL 2
 
 static struct Configuration {
     int dialMode = DIAL_MODE_SINGLE;
@@ -72,7 +70,7 @@ void _putchar(char character) { serial_write_char(character); }
 
 static const char* stateToStr()
 {
-    const char* stateMap[] = {"-", "INIT", "IDLE", "RING", "WAIT", "DIAL", "DIAL2", "DIAL_ERROR", "TERMINAL"};
+    const char* stateMap[] = {"-", "INIT", "IDLE", "RING", "WAIT", "DIAL", "DIAL_ERROR", "TERMINAL"};
 
     return stateMap[sState];
 }
@@ -196,6 +194,7 @@ const char* serial_read_cmd()
 {
     const char* cmd = serial_read_line();
     if (cmd) {
+        // serial_printf("LINE:%s", cmd);
         if (!strlen(cmd)) {
             serial_print("READY");
             return NULL;
@@ -223,9 +222,20 @@ void handle_state_initial(StateStage stage)
     }
 }
 
+bool parse_key(const char* key, const char** conf)
+{
+    int len = strlen(key);
+    if (!strncmp(key, *conf, len) && (*conf)[len] == ':') {
+        *conf += len + 1;
+        return true;
+    }
+
+    return false;
+}
+
 // Configuration keys
 //
-//  DM:<n>         int. 0 disable, 1: single digit dial (default), 2: number dial
+//  DM:<n>         int. 0 disable, 1: single digit dial (default)
 //  TON:<voltage>  float. On-hook threshold voltage level
 //  TOFF:<voltage> float. Off-hook threshold voltage level.
 //  HZ:<freq>      int. Ringing frequency
@@ -237,34 +247,31 @@ bool parse_and_apply_config(const char* conf)
         serial_printf("CONF DM:%d TON:%.2fV TOFF:%.2fV HZ:%d", config.dialMode, config.onHookThreshold, config.offHookThreshold, config.ringFreq);
     } else {
         while (*conf == ' ') {
+            // serial_printf("\"\r%s\"", conf);
             conf++;
             char* endptr = NULL;
-            if (!strncmp(conf, "DM:", 3)) {  // Dial mode configuration
-                conf += 3;
+            if (parse_key("DM", &conf)) {  // Dial mode configuration
                 int val = strtol(conf, &endptr, 10);
-                if (*endptr != conf) {
+                if (endptr != conf) {
                     config.dialMode = val;
                 } else
                     return false;
-            } else if (!strncmp(conf, "TON:", 4)) {  // On-hook threshold level
-                conf += 3;
+            } else if (parse_key("TON", &conf)) {  // On-hook threshold level
                 float val = strtod(conf, &endptr);
-                if (*endptr != conf) {
+                if (endptr != conf) {
                     config.onHookThreshold = val;
                 } else
                     return false;
 
-            } else if (!strncmp(conf, "TOF:", 4)) {  // Off-hook threshold level
-                conf += 3;
+            } else if (parse_key("TOFF", &conf)) {  // Off-hook threshold level
                 float val = strtod(conf, &endptr);
-                if (*endptr != conf) {
+                if (endptr != conf) {
                     config.offHookThreshold = val;
                 } else
                     return false;
-            } else if (!strncmp(conf, "HZ:", 3)) {  // Ringing frequency
-                conf += 3;
+            } else if (parse_key("HZ", &conf)) {  // Ringing frequency
                 int val = strtol(conf, &endptr, 10);
-                if (*endptr != conf) {
+                if (endptr != conf) {
                     config.ringFreq = val;
                 } else
                     return false;
@@ -509,7 +516,6 @@ void handle_state_wait(StateStage stage)
                     // Line has been shorted for long enough. Dial begins
                     switch (config.dialMode) {
                         case DIAL_MODE_SINGLE: setState(STATE_DIAL); break;
-                        case DIAL_MODE_FULL: setState(STATE_DIAL2); break;
                         case DIAL_MODE_NONE:  // ignore
                         default: break;
                     }
@@ -544,34 +550,61 @@ void handle_state_dial(StateStage stage)
 
         switch (state) {
             case PREPARE:
-                // line is in short, wait until it drops to on-hook
+                // line is in short, wait until it opens (on-hook)
                 if (pulseTimeout.update(ts)) {
                     // something is wrong, abort
                     setState(STATE_DIAL_ERROR);
                     state = DONE;
                 } else if (sLineState == LINE_STATE_ON_HOOK) {
-                    // Number pulses begin
+                    // Line is open. Number pulses begin
                     state = PULSES;
                 }
                 break;
             case PULSES: {
                 // NOTE! Code can spend in this loop up to a few seconds
 
+                // Dial pulse waveform (dialing 3 in this example). Windback takes
+                // time propotionally to the number, i.e. how long rotary dial has to be winded.
+                // Each pulse lasts approx. 100ms with 30% duty. Last pulse might be shorter on
+                // some phones.
+                //
+                //        windback     pulse  pulse pulse
+                //      ____________     __    __    __        shorted line
+                //     |            |   |  |  |  |  |  |
+                //     |            |   |  |  |  |  |  |
+                //     |            |   |  |  |  |  |  |       off-hook (normal) line
+                //  ___|            |   |  |  |  |  |  |___________
+                //                  |   |  |  |  |  |
+                // 0V               |___|  |__|  |__|          on-hook (open) line
+                //
+
+
                 // Digit pulses have started, count them.
-                bool pulseDetected = false;
                 int dialPulses = 0;
-                Timer2 numberTimeout(false, 200);  // timeout for individual digit
-                while (!numberTimeout.update()) {
-                    if (sLineState == LINE_STATE_ON_HOOK && !pulseDetected) {
-                        dialPulses++;
-                        pulseDetected = true;
-                        numberTimeout.reset();
+                Timer2 waitTimer(true, 50);
+
+                do {
+                    waitTimer.reset();
+                    // Line is on-hook (open).
+                    while (!waitTimer.update())
+                        ;
+
+                    // wait until line shorts. This indicates a dial pulse
+                    while (!waitTimer.update()) {
+                        updateLineState();
+                        if (sLineState == LINE_STATE_SHORT) {
+                            dialPulses++;
+                            break;
+                        }
                     }
-                    if (sLineState == LINE_STATE_OFF_HOOK && pulseDetected) {
-                        pulseDetected = false;
+                    // wait until line opens again
+                    waitTimer.reset();
+                    while (!waitTimer.update()) {
+                        updateLineState();
+                        if (sLineState == LINE_STATE_ON_HOOK) break;
                     }
-                    updateLineState();
-                }
+
+                } while (sLineState == LINE_STATE_ON_HOOK);
 
                 if (dialPulses > 0 && dialPulses <= 10) {
                     // print out dialed number
@@ -585,115 +618,6 @@ void handle_state_dial(StateStage stage)
                 state = DONE;
             } break;
             case DONE:
-            default: break;
-        }
-    }
-    if (stage == LEAVE) {
-    }
-}
-
-// Processes and reports the full dialed number before returning back to the WAIT stage
-void handle_state_dial2(StateStage stage)
-{
-    enum DialState { WAIT, PREPARE, PULSES, DONE };
-    static DialState state = PREPARE;
-
-    static Timer2 dialTimeout(false, 3500);   // timeout for the next digit
-    static Timer2 pulseTimeout(false, 2000);  // timeout for the pulses to begin
-    static char dialedNumber[16];
-    const int maxDigits = sizeof(dialedNumber) - 1;
-    static int digits = 0;
-
-    uint32_t ts = millis();
-
-    if (stage == ENTER) {
-        digits = 0;
-        dialTimeout.reset();
-        pulseTimeout.reset(ts);
-        state = PREPARE;
-        serial_print("DIAL_BEGIN");
-    }
-
-    if (stage == EXECUTE) {
-        // discard commands
-        discardCommands();
-        updateLineState();
-
-        switch (state) {
-            case WAIT:
-                if (dialTimeout.update()) {
-                    // timeout
-                    state = DONE;
-                }
-                if (sLineState == LINE_STATE_ON_HOOK) {
-                    // user has closed the phone
-                    serial_print("LINE ON_HOOK");
-                    digits = 0;
-                    state = DONE;
-                }
-                if (sLineState == LINE_STATE_SHORT) {
-                    // dial pulses are about to begin
-                    pulseTimeout.reset();
-                    state = PREPARE;
-                }
-                break;
-            case PREPARE:
-                // line is in short, wait until it drops to on-hook
-                if (pulseTimeout.update(ts)) {
-                    // something is wrong, abort
-                    setState(STATE_DIAL_ERROR);
-                    digits = -1;
-                    state = DONE;
-                } else if (sLineState == LINE_STATE_ON_HOOK) {
-                    // Number pulses begin
-                    state = PULSES;
-                }
-                break;
-            case PULSES: {
-                // NOTE! Code can spend in this loop up to a few seconds
-
-                // Digit pulses have started, count them.
-                bool pulseDetected = false;
-                int dialPulses = 0;
-                Timer2 numberTimeout(false, 200);  // timeout for an individual digit
-                while (!numberTimeout.update()) {
-                    if (sLineState == LINE_STATE_ON_HOOK && !pulseDetected) {
-                        dialPulses++;
-                        pulseDetected = true;
-                        numberTimeout.reset();
-                    }
-                    if (sLineState == LINE_STATE_OFF_HOOK && pulseDetected) {
-                        pulseDetected = false;
-                    }
-                    updateLineState();
-                }
-
-                if (dialPulses > 0 && dialPulses <= 10) {
-                    // print out dialed number
-                    if (dialPulses == 10) dialPulses = 0;
-                    if (digits < maxDigits) {
-                        dialedNumber[digits++] = '0' + dialPulses;
-                    }
-                    dialTimeout.reset();
-                    state = WAIT;
-                } else {
-                    state = DONE;
-                    digits = -1;
-                }
-                state = DONE;
-            } break;
-            case DONE:
-                if (digits > 0) {
-                    dialedNumber[digits] = '\0';
-                    serial_printf("DIAL %s", dialedNumber);
-                    setState(STATE_WAIT);
-                } else if (digits == 0) {
-                    serial_print("DIAL_CANCEL");
-                    setState(STATE_WAIT);
-                } else if (digits < 0) {
-                    serial_print("DIAL_ERROR");
-                    setState(STATE_DIAL_ERROR);
-                }
             default: break;
         }
     }
@@ -867,7 +791,6 @@ const StateHandler stateHandlers[] = {
     handle_state_ring,
     handle_state_wait,
     handle_state_dial,
-    handle_state_dial2,
     handle_state_dialerror,
     handle_state_terminal
 };

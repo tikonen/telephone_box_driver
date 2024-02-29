@@ -22,7 +22,7 @@ struct RingBuffer {
 
 static RingBuffer recvRingBuffer;
 
-#define LINE_BUFFER_LEN 16
+#define LINE_BUFFER_LEN 32
 static char linebuffer[LINE_BUFFER_LEN];
 
 void serial_clear()

@@ -1,0 +1,14 @@
+# Model file
+# Ericsson DAH 1930's
+
+# This phone has no dial
+DM:0
+
+# On-hook threshold voltage level as sensed by 47 Ohm resistor.
+TON: 0.07
+
+# Off-hook threshold voltage level as sensed by 47 Ohm resistor.
+TOFF: 2
+
+# Ringing frequency
+HZ:25
