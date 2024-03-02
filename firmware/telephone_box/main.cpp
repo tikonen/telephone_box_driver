@@ -30,6 +30,8 @@ enum State {
     STATE_TERMINAL     // Debug and testing mode
 };
 
+static LineState sLineState = LINE_STATE_UNKNOWN;
+
 static const char* lineStateToStr(LineState state)
 {
     const char* lineStateMap[] = {
@@ -43,13 +45,15 @@ static const char* lineStateToStr(LineState state)
 }
 
 enum StateStage { ENTER, EXECUTE, LEAVE };
-static LineState sLineState = LINE_STATE_UNKNOWN;
-static State sState = STATE_INITIAL;
-static State sLastState = STATE_NONE;
 
 // Voltage thresholds for line sense pin
 #define LSENSE_ONHOOK_V 0.07  // line sense should be around 50-200mV depending of the phone
 #define LSENSE_OFFHOOK_V 1.5
+
+// Ringing parameters
+#define RING_FREQ_HZ 25
+#define RING_CADENCE_ON_MS 2000
+#define RING_CADENCE_OFF_MS 2000
 
 #define DIAL_MODE_NONE 0
 #define DIAL_MODE_SINGLE 1
@@ -59,6 +63,8 @@ static struct Configuration {
     float onHookThreshold = LSENSE_ONHOOK_V;
     float offHookThreshold = LSENSE_OFFHOOK_V;
     int ringFreq = RING_FREQ_HZ;
+    int ringCadenceOn = RING_CADENCE_ON_MS;
+    int ringCadenceOff = RING_CADENCE_OFF_MS;
 } config;
 
 void _putchar(char character) { serial_write_char(character); }
@@ -68,22 +74,8 @@ void _putchar(char character) { serial_write_char(character); }
 
 #define test_button() (digitalRead(TEST_BUTTON_PIN) == LOW)
 
-static const char* stateToStr()
-{
-    const char* stateMap[] = {"-", "INIT", "IDLE", "RING", "WAIT", "DIAL", "DIAL_ERROR", "TERMINAL"};
-
-    return stateMap[sState];
-}
-
-bool setState(State newState)
-{
-    sLastState = sState;
-    sState = newState;
-
-    if (sLastState != sState) {
-        serial_printf("STATE %s", stateToStr());
-    }
-}
+static const char* stateToStr();
+bool setState(State newState);
 
 bool setLineState(LineState newState)
 {
@@ -222,6 +214,7 @@ void handle_state_initial(StateStage stage)
     }
 }
 
+// parses string like KEY:val
 bool parse_key(const char* key, const char** conf)
 {
     int len = strlen(key);
@@ -239,12 +232,19 @@ bool parse_key(const char* key, const char** conf)
 //  TON:<voltage>  float. On-hook threshold voltage level
 //  TOFF:<voltage> float. Off-hook threshold voltage level.
 //  HZ:<freq>      int. Ringing frequency
+//  RCON:<ms>      int. Ring cadence on
+//  RCOFF:<ms>     int. Ring cadence off
 //
 bool parse_and_apply_config(const char* conf)
 {
     if (*conf == '\0') {
         // print current configuration
-        serial_printf("CONF DM:%d TON:%.2fV TOFF:%.2fV HZ:%d", config.dialMode, config.onHookThreshold, config.offHookThreshold, config.ringFreq);
+        serial_printf("CONF DM:%d", config.dialMode);
+        serial_printf("CONF TON:%.2fV", config.onHookThreshold);
+        serial_printf("CONF TOFF:%.2fV", config.offHookThreshold);
+        serial_printf("CONF HZ:%d", config.ringFreq);
+        serial_printf("CONF RCON:%d", config.ringCadenceOn);
+        serial_printf("CONF RCOFF:%d", config.ringCadenceOff);
     } else {
         while (*conf == ' ') {
             // serial_printf("\"\r%s\"", conf);
@@ -262,7 +262,6 @@ bool parse_and_apply_config(const char* conf)
                     config.onHookThreshold = val;
                 } else
                     return false;
-
             } else if (parse_key("TOFF", &conf)) {  // Off-hook threshold level
                 float val = strtod(conf, &endptr);
                 if (endptr != conf) {
@@ -273,6 +272,18 @@ bool parse_and_apply_config(const char* conf)
                 int val = strtol(conf, &endptr, 10);
                 if (endptr != conf) {
                     config.ringFreq = val;
+                } else
+                    return false;
+            } else if (parse_key("RCON", &conf)) {  // Ring cadence off time
+                float val = strtod(conf, &endptr);
+                if (endptr != conf) {
+                    config.ringCadenceOn = val;
+                } else
+                    return false;
+            } else if (parse_key("RCOFF", &conf)) {  // Ring cadence off time
+                float val = strtod(conf, &endptr);
+                if (endptr != conf) {
+                    config.ringCadenceOff = val;
                 } else
                     return false;
             } else {
@@ -357,8 +368,8 @@ void handle_state_ring(StateStage stage)
     static bool ringState = false;
 
     static Timer2 ringingTimeout(false, 30000);
-    static Timer2 ringTime(false, RING_CADENCE_ON_MS);
-    static Timer2 ringPauseTime(false, RING_CADENCE_OFF_MS);
+    static Timer2 ringTime(false, config.ringCadenceOn);
+    static Timer2 ringPauseTime(false, config.ringCadenceOff);
     static Timer2 ringHzTimer(true, 1000 / config.ringFreq / 2);
     static Timer2 ringTripStabilizationTimer(false, RING_TRIP_STABILIZATION_DELAY_MS);
 
@@ -377,8 +388,8 @@ void handle_state_ring(StateStage stage)
 
         ts = millis();
         ringingTimeout.reset(ts);
-        ringTime.reset(ts);
-        ringPauseTime.reset(ts);
+        ringTime.set(config.ringCadenceOn);
+        ringPauseTime.set(config.ringCadenceOff);
         ringHzTimer.set(1000 / config.ringFreq / 2);
         ringTripStabilizationTimer.reset(ts);
 
@@ -769,6 +780,15 @@ void handle_state_terminal(StateStage stage)
 
 typedef void (*StateHandler)(StateStage);
 
+static State sState = STATE_INITIAL;
+static State sLastState = STATE_NONE;
+
+bool setState(State newState)
+{
+    sLastState = sState;
+    sState = newState;
+}
+
 void handle_state_none(StateStage stage)
 {
     // dummy handler
@@ -784,26 +804,32 @@ void handle_state_none(StateStage stage)
 }
 
 // clang-format off
-const StateHandler stateHandlers[] = {
-    handle_state_none,
-    handle_state_initial,
-    handle_state_idle,
-    handle_state_ring,
-    handle_state_wait,
-    handle_state_dial,
-    handle_state_dialerror,
-    handle_state_terminal
+static struct {
+    StateHandler handler;
+    const char* name;
+} sStateTbl[] = {
+    { handle_state_none, "-" },
+    { handle_state_initial, "INIT"},
+    { handle_state_idle, "IDLE"},
+    { handle_state_ring, "RING"},
+    { handle_state_wait, "WAIT"},
+    { handle_state_dial, "DIAL"},
+    { handle_state_dialerror, "DIAL_ERROR"},
+    { handle_state_terminal, "TERMINAL"}
 };
 // clang-format on
+
+static const char* stateToStr() { return sStateTbl[sState].name; }
 
 void loop()
 {
     if (sLastState != sState) {
         State prevState = sLastState;
         sLastState = sState;
-        stateHandlers[prevState](LEAVE);
-        stateHandlers[sState](ENTER);
+        sStateTbl[prevState].handler(LEAVE);
+        serial_printf("STATE %s", stateToStr());
+        sStateTbl[sState].handler(ENTER);
     } else {
-        stateHandlers[sState](EXECUTE);
+        sStateTbl[sState].handler(EXECUTE);
     }
 }

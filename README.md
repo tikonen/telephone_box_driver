@@ -21,7 +21,7 @@ Package `telephonebox` is a low level interface for the Telephone Box serial int
 * [numpy](https://pypi.org/project/numpy/)
 * [pyserial](https://pypi.org/project/pyserial/)
 * [serial-tool](https://pypi.org/project/serial-tool/)
-2. Plugin in Telephone Box device power, usb and audio lines (out and mic). You may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for clone Arduino Nano compatibility.
+2. Plugin in Telephone Box device power, usb and audio lines (out and mic). 
 3. Run demo script to start the default demo application.
 
 	```
@@ -33,3 +33,6 @@ Package `telephonebox` is a low level interface for the Telephone Box serial int
 	Device initialized.
 	*** IDLE (ONHOOK)
 	```
+
+### Troubleshooting
+In connection errors you may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for clone Arduino Nano compatibility. In case of clone Arduino Nano board that uses a fake CH340 chip see the following pages for possible solutions. https://github.com/SHWotever/SimHub/wiki/Arduino---Counterfeit-Fake-CH340G-chips-driver-issues and https://github.com/SHWotever/FakeCH340DriverFixer/

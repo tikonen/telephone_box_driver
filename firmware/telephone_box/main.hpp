@@ -20,11 +20,6 @@
 #define POWER_DIS_PIN 5
 #define RELAY_DELAY_MS 50
 
-// Ringing parameters
-#define RING_FREQ_HZ 25
-#define RING_CADENCE_ON_MS 2000
-#define RING_CADENCE_OFF_MS 2000
-
 // Trip sense circuit might give initially spurious trips before phone circuit and capacitors have
 // reached an stable operation point. Ignore trips for this long.
 #define RING_TRIP_STABILIZATION_DELAY_MS 200
