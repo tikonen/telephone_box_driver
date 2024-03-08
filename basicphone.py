@@ -21,25 +21,15 @@ HANGUP_EFFECT = 'phone_hangup.wav'
 
 
 class BasicPhone():
-    def __init__(self, port, verbose):
+    def __init__(self, driver, verbose):
         print("Loading audio files.")
         self.verbose = verbose
+        self.driver = driver
         self.load_audio()
-
-        print("Connecting...")
-        cc = tb.CommandConnection(self.verbose)
-        cc.open_port(port, timeoutms=500)
-        self.driver = tb.Driver(cc, verbose=self.verbose)
-        self.driver.connect()
-        print("Device initialized.")
 
     def config(self, conf):
         if conf:
-            # Apply each configuration key separately
-            for kv in [{k: conf[k]} for k in conf]:
-                ret = self.driver.command(Command.CONF, kv)
-                if ret != Event.OK:
-                    raise Exception(f'Faild to set configuration key {kv}')
+            self.driver.configure(conf)
 
     def load_audio(self):
         self.dial_tone = soundfile.read(os.path.join(AUDIO_PATH, DIAL_TONE))

@@ -45,6 +45,13 @@ class Driver:
         self.command(Command.LINE)
         self.command(Command.STATE)
 
+    def configure(self, config):
+        # Apply each configuration key separately
+        for kv in [{k: config[k]} for k in config]:
+            ret = self.command(Command.CONF, kv)
+            if ret != Event.OK:
+                raise Exception(f'Failed to set configuration key {kv}')
+
     # is driver ready to receive a command
     def is_ready(self):
         if self.state == State.DIAL_ERROR:
@@ -79,7 +86,7 @@ class Driver:
             return self.parse_and_process(cmd, params)
         return (Event.NONE, [])
 
-    def command(self, cmd: Command, params={}):
+    def command_async(self, cmd: Command, params={}):
         if not self.is_ready():
             return False
         self.ready = False
@@ -90,6 +97,12 @@ class Driver:
             msg = f'{msg} {" ".join(msgparams)}'  # e.g. CONF DM:0 TOFF:1.2
 
         self.conn.send_cmd(msg)
+        return True
+
+    def command(self, cmd: Command, params={}):
+        if not self.command_async(cmd, params):
+            return False
+
         ret = None
         while True:
             (e, params) = self.receive()

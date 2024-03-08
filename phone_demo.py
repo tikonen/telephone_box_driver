@@ -2,22 +2,18 @@ import argparse
 import os
 import sys
 import time
-import math
 import queue
-import re
 import serial.tools.list_ports
 
 import sounddevice as sd
 import soundfile as sf
 
-from telephonebox import Event, State, LineState, Command
+from telephonebox import Event, State, Command, CommandConnection, Driver
 from basicphone import BasicPhone
 from dtmfphone import DTMFPhone
+from phone_util import load_model_config, adjust_volume
 
 verbose_debug = False
-
-# MODEL_LM_ERICSSON_DLG012 0
-# MODEL_LM_ERICSSON_DAHH1301 1
 
 AUDIO_PATH = 'audio'
 ELEVATOR_MUSIC = 'Elevator-music.wav'
@@ -25,12 +21,6 @@ MUSIC = 'Last Ninja 1-1.wav'
 BEEPS = 'clock_sync_beeps.wav'
 SPEECH = 'The Matrix Agent Smith Monologue.wav'
 
-# Increase audio volume
-
-
-def adjust_volume(soundfile, db: int):
-    (data, samplerate) = soundfile
-    data *= math.pow(10, db/20)  # multiply amplitude
 
 # Implement few numbers that have a distinct logic
 
@@ -76,8 +66,8 @@ class PhoneCallDemo(BasicPhone):
 
 class PhoneRingingDemo(BasicPhone):
 
-    def __init__(self, port, verbose_debug):
-        super().__init__(port, verbose_debug)
+    def __init__(self, driver, verbose_debug):
+        super().__init__(driver, verbose_debug)
         self.hasCalled = False
         self.timeout = time.time() + 5
 
@@ -194,28 +184,6 @@ class PhoneRecordDemo(BasicPhone):
         sd.stop()
 
 
-def load_model_config(model):
-    config = {}
-    if model:
-        print(f'Loading model configration {model}')
-        with open(model, 'rt') as file:
-            # matches: key:val
-            kvpre = re.compile(
-                r'^\s*(\w+)\s*:\s*([ -~]+)')
-            # matches: # comment
-            commentre = re.compile(r'^\s*#.*$')
-            for line in file.readlines():
-                line = line.strip()
-                # skip empty lines and comments
-                if line and not commentre.match(line):
-                    m = kvpre.match(line)
-                    if not m:
-                        raise Exception(f'Invalid configuration {line}')
-                    config[m[1]] = m[2]
-
-    return config
-
-
 def main():
     demohelp = """'call' Dialing and call handling,
         'ring' Phone ringing,
@@ -269,18 +237,25 @@ def main():
     else:
         print("WARNING: No input audio device")
 
+    print("Connecting...")
+    cc = CommandConnection(verbose_level)
+    cc.open_port(port, timeoutms=500)
+    driver = Driver(cc, verbose=verbose_level)
+    driver.connect()
+    print("Device initialized.")
+
     if args.demo == 'call':
         print("Demo#1 Call handling")
-        demo = PhoneCallDemo(port, verbose_level)
+        demo = PhoneCallDemo(driver, verbose_level)
     elif args.demo == 'ring':
         print("Demo#2 Ringout")
-        demo = PhoneRingingDemo(port, verbose_level)
+        demo = PhoneRingingDemo(driver, verbose_level)
     elif args.demo == 'record':
         print("Demo#3 Recording")
-        demo = PhoneRecordDemo(port, verbose_level)
+        demo = PhoneRecordDemo(driver, verbose_level)
     elif args.demo == 'dtmf':
         print("Demo#4 DTMF phone")
-        demo = DTMFPhone(port, verbose_level)
+        demo = DTMFPhone(driver, verbose_level)
     else:
         raise Exception("Unknown demo", args.demo)
 
