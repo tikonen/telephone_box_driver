@@ -61,10 +61,9 @@ class Button:
             pygame.draw.rect(screen, hcolor, r.inflate(-15, -15),
                              width=0, border_radius=5)
 
-        if self.disabled:
-            pygame.draw.rect(screen, "grey", r, width=2, border_radius=5)
-        else:
-            pygame.draw.rect(screen, "green", r, width=2, border_radius=5)
+        # button outline
+        pygame.draw.rect(
+            screen, "grey" if (self.pressed or self.disabled) else "green", r, width=2, border_radius=5)
 
         # Render the text
         r2 = self.surface_std.get_rect()
@@ -118,7 +117,7 @@ class Blinker:
 
     def update(self, dt):
         if self.disabled:
-            return False
+            return True
         if self.count != 0:
             self.timer += dt
             if self.timer >= self.cycle:
@@ -126,8 +125,31 @@ class Blinker:
                 self.timer %= self.cycle
                 self.count -= 1
             return False
-        else:
+        return True
+
+
+class Timer:
+    def __init__(self, timeout, callback=None):
+        self.timer = 0
+        self.disabled = False
+        self.timeout = timeout
+        self.callback = callback
+
+    def reset(self):
+        self.timer = 0
+
+    def update(self, dt):
+        if self.disabled:
             return True
+
+        self.timer += dt
+        if self.timer >= self.timeout:
+            self.timer %= self.timeout
+            self.disabled = True
+            if self.callback:
+                self.callback()
+            return True
+        return False
 
 
 class KeyPad:

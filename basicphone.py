@@ -26,7 +26,7 @@ class BasicPhone():
         return (ev, params, self.driver.get_state())
 
     # Wait doing nothing until state changes
-    def waitInState(self, theState, predicate=None):
+    def waitInState(self, theState, predicate=None) -> State:
         while True:
             (ev, _, state) = self.update()
             if state != theState:
@@ -80,20 +80,18 @@ class BasicPhone():
         print("*** RINGING", digits)
         pa.play_audio(self.ringing_tone)
         ts = time.time()
-        while True:
-            (_, _, state) = self.update()
-            if state != State.WAIT:
-                break
-            if self.answer(digits, time.time() - ts):
-                pa.stop_audio()
-                # play pickup crackle sound effect
-                pa.play_audio(self.pickup_effect, wait=True)
-                self.oncall(digits)
-                if self.driver.get_state() == State.WAIT:  # Line is still open
-                    pa.play_audio(self.hangup_effect, wait=True)
-                break
 
+        def answer_check():
+            return not self.answer(digits, time.time() - ts)
+
+        result = self.waitInState(State.WAIT, answer_check)
         pa.stop_audio()
+        if result == State.WAIT:
+            # play pickup crackle sound effect
+            pa.play_audio(self.pickup_effect, wait=True)
+            self.oncall(digits)
+            if self.driver.get_state() == State.WAIT:  # Line is still open
+                pa.play_audio(self.hangup_effect, wait=True)
 
     # Return true if a call to this number should be answered
     def answer(self, number, elapsed) -> bool:
@@ -115,7 +113,7 @@ class BasicPhone():
         while True:
             (_, _, state) = self.update()
             # User must hang up to clear state
-            if state == State.IDLE:
+            if state == State.IDLE or state == State.EXIT:
                 break
 
         pa.stop_audio()

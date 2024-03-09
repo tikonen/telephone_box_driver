@@ -47,15 +47,16 @@ class PhoneCallDemo(BasicPhone):
 
         if number == "810581":
             # Play elevator music track in an endless loop
-            elevator_music = sf.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
+            elevator_music = sf.read(os.path.join(
+                AUDIO_PATH, ELEVATOR_MUSIC), dtype='float32')
             phone_audio.play_audio(elevator_music)
         elif number == "888":
             # Play a track once
-            music = sf.read(os.path.join(AUDIO_PATH, MUSIC))
+            music = sf.read(os.path.join(AUDIO_PATH, MUSIC), dtype='float32')
             phone_audio.play_audio(music, loop=False)
         else:
             # play few beeps and end the call
-            beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
+            beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS), dtype='float32')
             phone_audio.play_audio(beeps, loop=False)
 
         # Wait until track ends or the phone hangs up
@@ -110,7 +111,7 @@ class PhoneRingingDemo(BasicPhone):
     # Phone was picked up and the line is stable
     def pickup(self):
         print("*** PICK UP")
-        speech = sf.read(os.path.join(AUDIO_PATH, SPEECH))
+        speech = sf.read(os.path.join(AUDIO_PATH, SPEECH), dtype='float32')
         adjust_volume(speech, 10)  # Make it louder by 10dB (twice as loud)
 
         # Delay so that user has had time to put handset on the ear.
@@ -138,7 +139,7 @@ class PhoneRecordDemo(BasicPhone):
 
         time.sleep(2)
         # play few beeps first
-        beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
+        beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS), dtype='float32')
         phone_audio.play_audio(beeps, wait=True)
 
         # check if phone is still off-hook
@@ -156,11 +157,9 @@ class PhoneRecordDemo(BasicPhone):
 
         def flush(file):
             """ Write received audio blocks to the record file """
-            try:
-                while True:
-                    file.write(q.get(False))
-            except queue.Empty:
-                pass
+            while not q.empty():
+                file.write(q.get(False))
+
             return True
 
         samplerate = 22050

@@ -52,7 +52,7 @@ drawables = [
     diallabel
 ]
 
-nondrawables = [errorblinker]
+tasks = [errorblinker]
 
 
 class Box:
@@ -65,7 +65,7 @@ phone_audio.load_audio(effects)
 
 def draw():
     # fill the screen with a color to wipe away anything from last frame
-    screen.fill("black")
+    screen.fill("midnightblue")
 
     r = diallabel.rect.copy()
     r = r.inflate(100, 0)
@@ -84,11 +84,10 @@ def draw():
 
 number = []
 
+# Process events from the Phonebox
+
 
 def handle_event(ev, params, state):
-    global number
-    global nondrawables
-
     if ev == Event.STATE:
         statename = params[0]
         if state == State.IDLE:
@@ -126,14 +125,13 @@ def handle_event(ev, params, state):
         diallabel.settext(sysfont_large, ''.join(number))
         keypadbutton = keypad.button(key)
         keypadbutton.highlight = True
-        nondrawables.append(Blinker(keypadbutton, 0.1, 3))
+        tasks.append(Blinker(keypadbutton, 0.1, 3))
 
-# Loop for the phone device.
+# Loop for the phonebox device.
 
 
 def loop_server(driver):
-    global nondrawables
-
+    global tasks
     ringbutton.disabled = True
     hookbutton.disabled = True
     hookbutton.clickable = False
@@ -146,7 +144,6 @@ def loop_server(driver):
 
     # Thread worker reads the driver events and queues them for the main loop
     def driver_reader():
-        nonlocal driver
         while loop_server.running:
             (ev, params) = driver.receive()
             if ev != Event.NONE:
@@ -176,12 +173,12 @@ def loop_server(driver):
             if ringbutton.clicked:
                 if driver.get_state() == State.RING:
                     driver.command_async(Command.STOP)
-                else:
+                elif driver.get_state() == State.IDLE:
                     driver.command_async(Command.RING)
 
-            # Update nondrawables and remove them from list if they are done
-            nondrawables = [
-                elem for elem in nondrawables if not elem.update(dt)]
+            # Update tasks and remove them from list if they are done
+            tasks = [
+                elem for elem in tasks if not elem.update(dt)]
 
             draw()
             # limits FPS
@@ -199,8 +196,8 @@ def loop_server(driver):
 
 
 def loop_emulation(driver):
-    global nondrawables
-    global number
+    global tasks
+    number = []
 
     ringbutton.disabled = True
     ringbutton.clickable = False
@@ -209,15 +206,17 @@ def loop_emulation(driver):
     hookbutton.clickable = True
     hookbutton.pressed = False
     keypad.disabled = True
+    diallabel.settext(sysfont_large, 'READY')
 
     dt = 0
     FPS = 30
 
-    ringblinker = None
     dtmfplayer = phone_audio.create_dtmf_player()
     dtmfplayer.start()
 
     ringing = phone_audio.load_file('phone_ringing.wav')
+
+    ringing_tasks = []
 
     try:
         while loop_emulation.running:
@@ -231,20 +230,17 @@ def loop_emulation(driver):
             (cmd, _) = driver.receive_cmd()
             if cmd == Command.RING:
                 ringbutton.highlight = True
-                ringblinker = Blinker(ringbutton, 0.5, 100)
+                ringing_tasks.append(Blinker(ringbutton, 0.3))
+                # ring expiration timer
+                ringing_tasks.append(Timer(
+                    30, lambda: driver.command(Command.STOP)))
                 driver.set_state(State.RING)
                 phone_audio.play_audio(ringing)
-            elif cmd == Command.STOP:
+            elif cmd == Command.STOP and driver.get_state() == State.RING:
                 ringbutton.highlight = False
-                ringblinker = None
-                driver.set_state(State.WAIT)
+                ringing_tasks.clear()
+                driver.set_state(State.IDLE)
                 phone_audio.stop_audio()
-
-            if ringblinker:
-                if ringblinker.update(dt):
-                    ringblinker = None
-                    ringbutton.highlight = False
-                    driver.set_state(State.WAIT)
 
             for elem in drawables:
                 elem.update(dt)
@@ -264,7 +260,7 @@ def loop_emulation(driver):
                         diallabel.settext(sysfont_large, '-')
                     driver.set_state(State.WAIT)
                     ringbutton.highlight = False
-                    ringblinker = None
+                    ringing_tasks.clear()
                 else:
                     # going on hook
                     driver.set_line_state(LineState.ON_HOOK)
@@ -274,7 +270,7 @@ def loop_emulation(driver):
             if keypad.clicked:
                 kpbutton = keypad.clicked
                 kpbutton.highlight = True
-                nondrawables.append(Blinker(kpbutton, 0.1, 3))
+                tasks.append(Blinker(kpbutton, 0.1, 3))
                 key = kpbutton.text
                 dtmfplayer.beep(key)
                 number.append(key)
@@ -284,9 +280,11 @@ def loop_emulation(driver):
                 driver.put_event(Event.DIAL, [key])
                 driver.set_state(State.WAIT)
 
-            # Update nondrawables and remove them from list if they are done
-            nondrawables = [
-                elem for elem in nondrawables if not elem.update(dt)]
+            # Update tasks and remove them from list if they are done
+            tasks = [
+                elem for elem in tasks if not elem.update(dt)]
+            ringing_tasks = [
+                elem for elem in ringing_tasks if not elem.update(dt)]
 
             draw()
             # limits FPS

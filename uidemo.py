@@ -9,11 +9,10 @@ import pygame
 from telephonebox import Event, State, Command, LineState, CommandConnection, Driver
 from phone_util import load_model_config
 
-# Emulation devices that can be used with applications that talk to the Phonebox. UI is the phone.
-
 
 def create_device_emulator(verbose_level, port, model):
-    print("Emulation device")
+    """Phonebox emulator that can be used with applications that normally talk to the Phonebox. UI is the phone."""
+    print("Emulator")
 
     class EmulationDevice:
         eventq = queue.Queue()  # outgoing events
@@ -29,8 +28,9 @@ def create_device_emulator(verbose_level, port, model):
         def receive(self):
             try:
                 ev = self.eventq.get(timeout=1.0)
-                if ev[0] == Event.STATE:
-                    self.state = State[ev[1][0]]
+                (event, params) = ev
+                if event == Event.STATE:
+                    self.state = State[params[0]]
                 return ev
             except queue.Empty:
                 pass
@@ -83,6 +83,7 @@ def create_test_emulator(verbose_level, port, model):
             (Event.NONE, []),
         ]
 
+        # cycle through the events
         def receive(self):
             time.sleep(1)
             if self.idx >= len(self.events):
@@ -96,6 +97,12 @@ def create_test_emulator(verbose_level, port, model):
 
         def get_state(self):
             return self.state
+
+        def command_async(self, cmd: Command, params={}):
+            return True
+
+        def command(self, cmd: Command, params={}):
+            return True
 
     return TestDriver()
 
@@ -175,20 +182,20 @@ def main():
     else:
         import phone_demo
         if args.demo == 'call':
-            demo = phone_demo.PhoneCallDemo(device, verbose_level)
+            app = phone_demo.PhoneCallDemo(device, verbose_level)
         elif args.demo == 'ring':
-            demo = phone_demo.PhoneRingingDemo(device, verbose_level)
+            app = phone_demo.PhoneRingingDemo(device, verbose_level)
 
+        # Create thread to run the demo application
         def demo_runner():
-            nonlocal demo
             while ui.loop_emulation.running:
-                demo.loop()
+                app.loop()
 
         t = threading.Thread(target=demo_runner)
         ui.loop_emulation.running = True
         t.start()
         ui.loop_emulation(device)
-        device.set_state(State.EXIT)
+        device.set_state(State.EXIT)  # should wake up application
         t.join()
 
     pygame.quit()

@@ -7,14 +7,12 @@ import soundfile as sf
 
 from goertzel import Goertzel, dtmf
 
-VERBOSE = 0
-
 
 class DTFMDecoder():
 
     def __init__(self, verbose, samplerate, envelope_threshold=2.0):
-        global VERBOSE
-        VERBOSE = verbose
+
+        self.verbose = verbose
 
         # Number of useable samples depends on the sample rate. Higher sample rates give better accuracy.
         N = int(0.9 * dtmf.TONE_TIME * samplerate)
@@ -27,7 +25,8 @@ class DTFMDecoder():
             Goertzel(dtmf.FREQ_LOW4, N, samplerate),
             Goertzel(dtmf.FREQ_HIGH1, N, samplerate),
             Goertzel(dtmf.FREQ_HIGH2, N, samplerate),
-            Goertzel(dtmf.FREQ_HIGH3, N, samplerate)
+            Goertzel(dtmf.FREQ_HIGH3, N, samplerate),
+            Goertzel(dtmf.FREQ_HIGH4, N, samplerate)
         ]
         self.samplerate = samplerate
         self.envelope_threshold = envelope_threshold
@@ -40,7 +39,7 @@ class DTFMDecoder():
             p = g.power()
             if p > threshold:
                 freqs.append(g.f)
-            if VERBOSE:
+            if self.verbose:
                 print(f'{g.f} {p:2.2f} {" *" if p > threshold else ""}')
         if len(freqs) == 2:
             # exactly two frequencies detected, find corresponding symbol
@@ -79,7 +78,7 @@ class DTFMDecoder():
                     # only consider signal if enough time has passed since the last one
                     interval = t - self.lastts
                     if interval > dtmf.PAUSE_TIME * 0.8:  # signal acquired
-                        if VERBOSE > 1:
+                        if self.verbose > 1:
                             print(f'{t:.2f}s', "SIGNAL ON",
                                   f'{int(interval*1000)}ms')
                         self.signalts = t
@@ -89,7 +88,7 @@ class DTFMDecoder():
             else:  # no signal detected
                 if self.signalts:  # signal lost
                     duration = t - self.signalts
-                    if VERBOSE > 1:
+                    if self.verbose > 1:
                         print(f'{t:.2f}s', "SIGNAL OFF",
                               f'{int(duration*1000)}ms')
                     if duration > dtmf.TONE_TIME * 0.8:  # ignore if too short signal

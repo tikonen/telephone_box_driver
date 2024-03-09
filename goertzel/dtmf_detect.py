@@ -28,7 +28,7 @@ def resolvesymbol(gr, threshold):
             debug(1, '')
     if len(freqs) == 2:
         # exactly two frequencies detected, find corresponding symbol
-        for e in dtmf.SYMBOLS:
+        for e in dtmf.ALL_SYMBOLS:
             if freqs[0] in e[1] and freqs[1] in e[1]:
                 # symbol found
                 (fl, fh) = e[1]
@@ -79,7 +79,7 @@ def main():
     if not os.path.exists(audiopath):
         print(f'File not found: {audiopath}')
         return
-    (data, fs) = sf.read(audiopath)
+    (data, fs) = sf.read(audiopath, dtype='float32')
     print(f'{audiopath} {len(data)/fs:.2f}s samplerate: {fs}Hz')
 
     # Number of useable samples depends on the sample rate. Higher sample rates give better accuracy.
@@ -93,7 +93,8 @@ def main():
         Goertzel(dtmf.FREQ_LOW4, N, fs),
         Goertzel(dtmf.FREQ_HIGH1, N, fs),
         Goertzel(dtmf.FREQ_HIGH2, N, fs),
-        Goertzel(dtmf.FREQ_HIGH3, N, fs)
+        Goertzel(dtmf.FREQ_HIGH3, N, fs),
+        Goertzel(dtmf.FREQ_HIGH4, N, fs)
     ]
 
     envelope = 0
@@ -111,30 +112,40 @@ def main():
         decoded_numbers.append(dial)
         number.clear()
 
+    def signal_off():
+        nonlocal lastts
+        duration = t - signal
+        debug(2, f'{t:.2f}s', "SIGNAL OFF", f'{int(duration*1000)}ms')
+        if duration > dtmf.TONE_TIME * 0.8:  # ignore if too short signal
+            debug(1, f'ENVELOPE {envelopesample:2.1f}')
+            (detect, symbol) = resolvesymbol(gr, envelopesample * 0.5)
+            if detect:
+                number.append(symbol)
+            lastts = t
+
+    def signal_on():
+        nonlocal signal
+        nonlocal envelopesample
+        interval = t - lastts  # only consider signal if enough time has passed since the last one
+        if interval > dtmf.PAUSE_TIME * 0.8:
+            debug(2, f'{t:.2f}s', "SIGNAL ON",
+                  f'{int(interval*1000)}ms')
+            signal = t
+            envelopesample = 0
+            for g in gr:  # reset goertzel detectors
+                g.reset()
+
+    # Process data samples
     for (n, s) in enumerate(data):
         t = n/fs  # timestamp
         # rough envelope detector
         envelope = 0.95*envelope + abs(s)
         if envelope >= 1.0:  # signal amplitude is strong enough
             if not signal:
-                interval = t - lastts  # only consider signal if enough time has passed since the last one
-                if interval > dtmf.PAUSE_TIME * 0.8:
-                    debug(2, f'{t:.2f}s', "SIGNAL ON",
-                          f'{int(interval*1000)}ms')
-                    signal = t
-                    envelopesample = 0
-                    for g in gr:  # reset goertzel detectors
-                        g.reset()
+                signal_on()
         else:  # no signal detected
             if signal:
-                duration = t - signal
-                debug(2, f'{t:.2f}s', "SIGNAL OFF", f'{int(duration*1000)}ms')
-                if duration > dtmf.TONE_TIME * 0.8:  # ignore if too short signal
-                    debug(1, f'ENVELOPE {envelopesample:2.1f}')
-                    (detect, symbol) = resolvesymbol(gr, envelopesample * 0.5)
-                    if detect:
-                        number.append(symbol)
-                    lastts = t
+                signal_off()
                 signal = 0
             continue
         if signal:
@@ -146,6 +157,9 @@ def main():
         # if enough time has passed since last detected digit assume the whole dialed number has been decoded
         if t - lastts > 0.3 and len(number):
             addnumber()
+
+    if signal:
+        signal_off()
 
     if len(number):
         addnumber()

@@ -22,17 +22,7 @@ channels = 1
 subtype = 'PCM_16'
 filename = 'rec_unlimited.wav'
 
-
-def flush(file):
-    """ Write received audio blocks to the record file """
-    try:
-        while True:
-            file.write(q.get(False))
-    except queue.Empty:
-        pass
-
-
- # Make sure the file is opened before recording anything:
+# Make sure the file is opened before recording anything:
 with sf.SoundFile(filename, mode='x', samplerate=samplerate,
                   channels=1, subtype=subtype) as file:
     with sd.InputStream(samplerate=samplerate, channels=1, callback=callback):
