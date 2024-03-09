@@ -12,6 +12,7 @@ from telephonebox import Event, State, Command, CommandConnection, Driver
 from basicphone import BasicPhone
 from dtmfphone import DTMFPhone
 from phone_util import load_model_config, adjust_volume
+import phone_audio
 
 verbose_debug = False
 
@@ -47,19 +48,19 @@ class PhoneCallDemo(BasicPhone):
         if number == "810581":
             # Play elevator music track in an endless loop
             elevator_music = sf.read(os.path.join(AUDIO_PATH, ELEVATOR_MUSIC))
-            sd.play(elevator_music[0], elevator_music[1], loop=True)
+            phone_audio.play_audio(elevator_music)
         elif number == "888":
             # Play a track once
             music = sf.read(os.path.join(AUDIO_PATH, MUSIC))
-            sd.play(music[0], music[1], loop=False)
+            phone_audio.play_audio(music, loop=False)
         else:
             # play few beeps and end the call
             beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
-            sd.play(beeps[0], beeps[1], loop=False)
+            phone_audio.play_audio(beeps, loop=False)
 
         # Wait until track ends or the phone hangs up
-        self.waitInState(State.WAIT, lambda: sd.get_stream().active)
-        sd.stop()
+        self.waitInState(State.WAIT, lambda: phone_audio.is_playing())
+        phone_audio.stop_audio()
 
 # Rings the phone and plays a clip, then hangs up
 
@@ -118,15 +119,14 @@ class PhoneRingingDemo(BasicPhone):
             self.update()
 
         # start playing audio
-        sd.play(speech[0], speech[1], loop=False)
+        phone_audio.play_audio(speech, loop=False)
         # wait until audio stops or the phone hangs up
-        self.waitInState(State.WAIT, lambda: sd.get_stream().active)
-        sd.stop()
+        self.waitInState(State.WAIT, lambda: phone_audio.is_playing())
+        phone_audio.stop()
 
         # If still off-hook play hangup effect
         if self.driver.get_state() == State.WAIT:
-            sd.play(self.hangup_effect[0], self.hangup_effect[1], loop=False)
-            sd.wait()
+            phone_audio.play_audio(self.hangup_effect, wait=True)
 
 # Implement sound record example
 
@@ -139,8 +139,7 @@ class PhoneRecordDemo(BasicPhone):
         time.sleep(2)
         # play few beeps first
         beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS))
-        sd.play(beeps[0], beeps[1], loop=False)
-        sd.wait()
+        phone_audio.play_audio(beeps, wait=True)
 
         # check if phone is still off-hook
         (_, _, state) = self.update()

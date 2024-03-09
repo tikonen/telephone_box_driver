@@ -1,20 +1,7 @@
-import os
-import sounddevice
-import soundfile
 import time
 
 from telephonebox import Event, State, LineState, Command
-import telephonebox as tb
-
-# Precise tone plan is a signaling specification for plain old telephone
-# system (PSTN) that defines the call progress tones used on line.
-AUDIO_PATH = './audio'
-DIAL_TONE = 'tones/euro/dialtone_europe_425.wav'
-RINGING_TONE = 'tones/euro/ringing_tone_europe_425_cadence.wav'
-LOW_TONE = 'tones/precise_tone_plan/low_tone_480_620_cadence.wav'  # busy/error tone
-HIGH_TONE = 'tones/precise_tone_plan/high_tone_480.wav'
-PICKUP_EFFECT = 'phone_pickup.wav'
-HANGUP_EFFECT = 'phone_hangup.wav'
+import phone_audio as pa
 
 # Basic phone implements standard line tones and classical rotary phone logic. Methods
 # Can be overridden as required.
@@ -25,21 +12,11 @@ class BasicPhone():
         print("Loading audio files.")
         self.verbose = verbose
         self.driver = driver
-        self.load_audio()
+        pa.load_audio(self)
 
     def config(self, conf):
         if conf:
             self.driver.configure(conf)
-
-    def load_audio(self):
-        self.dial_tone = soundfile.read(os.path.join(AUDIO_PATH, DIAL_TONE))
-        self.ringing_tone = soundfile.read(
-            os.path.join(AUDIO_PATH, RINGING_TONE))
-        self.low_tone = soundfile.read(os.path.join(AUDIO_PATH, LOW_TONE))
-        self.pickup_effect = soundfile.read(
-            os.path.join(AUDIO_PATH, PICKUP_EFFECT))
-        self.hangup_effect = soundfile.read(
-            os.path.join(AUDIO_PATH, HANGUP_EFFECT))
 
     # Receive events from the driver and update status
     def update(self) -> tuple[Event, list[str], State]:
@@ -65,9 +42,9 @@ class BasicPhone():
     # Phone is off-hook and user is not dialing a number
     def wait(self):
         print("*** WAIT (OFFHOOK)")
-        sounddevice.play(self.dial_tone[0], self.dial_tone[1], loop=True)
+        pa.play_audio(self.dial_tone)
         state = self.waitInState(State.WAIT)
-        sounddevice.stop()
+        pa.stop_audio()
 
     # Dialing has started. Wait for each digit and after no new digits have been
     # received start a call
@@ -101,26 +78,22 @@ class BasicPhone():
     # Play ringing tone until answer
     def ringing(self, digits):
         print("*** RINGING", digits)
-        sounddevice.play(self.ringing_tone[0], self.ringing_tone[1], loop=True)
+        pa.play_audio(self.ringing_tone)
         ts = time.time()
         while True:
             (_, _, state) = self.update()
             if state != State.WAIT:
                 break
             if self.answer(digits, time.time() - ts):
-                sounddevice.stop()
+                pa.stop_audio()
                 # play pickup crackle sound effect
-                sounddevice.play(
-                    self.pickup_effect[0], self.pickup_effect[1], loop=False)
-                sounddevice.wait()
+                pa.play_audio(self.pickup_effect, wait=True)
                 self.oncall(digits)
                 if self.driver.get_state() == State.WAIT:  # Line is still open
-                    sounddevice.play(
-                        self.hangup_effect[0], self.hangup_effect[1], loop=False)
-                    sounddevice.wait()
+                    pa.play_audio(self.hangup_effect, wait=True)
                 break
 
-        sounddevice.stop()
+        pa.stop_audio()
 
     # Return true if a call to this number should be answered
     def answer(self, number, elapsed) -> bool:
@@ -130,16 +103,14 @@ class BasicPhone():
     def oncall(self, number):
         print("*** ONCALL", number)
         time.sleep(2)
-        sounddevice.play(self.low_tone[0], self.low_tone[1], loop=True)
-
+        pa.play_audio(self.low_tone)
         self.waitInState(State.WAIT)
-
-        sounddevice.stop()
+        pa.stop_audio()
 
     # Some error in dialing, usually means user failed to operate the rotary dial correctly.
     def dial_error(self):
         print('*** DIAL-ERROR')
-        sounddevice.play(self.low_tone[0], self.low_tone[1], loop=True)
+        pa.play_audio(self.low_tone)
 
         while True:
             (_, _, state) = self.update()
@@ -147,7 +118,7 @@ class BasicPhone():
             if state == State.IDLE:
                 break
 
-        sounddevice.stop()
+        pa.stop_audio()
 
     def loop(self):
         state = self.driver.get_state()
