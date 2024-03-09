@@ -43,7 +43,7 @@ class BasicPhone():
     def wait(self):
         print("*** WAIT (OFFHOOK)")
         pa.play_audio(self.dial_tone)
-        state = self.waitInState(State.WAIT)
+        self.waitInState(State.WAIT)
         pa.stop_audio()
 
     # Dialing has started. Wait for each digit and after no new digits have been

@@ -1,6 +1,18 @@
 import pygame
 
 
+class Drawable():
+    def __init__(self, surface):
+        self.rect = surface.get_rect()
+        self.surface = surface
+
+    def update(self, dt):
+        pass
+
+    def draw(self, screen):
+        screen.blit(self.surface, self.rect)
+
+
 class Button:
     def __init__(self, font, text, rect, highlightcolor='green', highlighttext=None, disabledhighlightcolor=None):
         self.text = text
@@ -164,13 +176,13 @@ class KeyPad:
         return next((b for b in self.buttons if b.text == key), None)
 
     def update(self, dt):
-        clicked = None
+        self.clicked = None
         for b in self.buttons:
             b.disabled = self.disabled
             b.update(dt)
             if b.clicked:
-                clicked = b
-        return clicked
+                self.clicked = b
+        return self.clicked
 
     def draw(self, screen):
         for b in self.buttons:

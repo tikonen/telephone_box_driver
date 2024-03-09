@@ -122,7 +122,7 @@ class PhoneRingingDemo(BasicPhone):
         phone_audio.play_audio(speech, loop=False)
         # wait until audio stops or the phone hangs up
         self.waitInState(State.WAIT, lambda: phone_audio.is_playing())
-        phone_audio.stop()
+        phone_audio.stop_audio()
 
         # If still off-hook play hangup effect
         if self.driver.get_state() == State.WAIT:
