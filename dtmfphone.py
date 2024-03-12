@@ -4,7 +4,7 @@ import queue
 import sounddevice as sd
 import soundfile as sf
 
-from telephonebox import State, Command
+from telephonebox import State, Command, Event
 from basicphone import BasicPhone
 from dtmfdecoder import DTFMDecoder
 
@@ -25,8 +25,7 @@ class DTMFPhone(BasicPhone):
 
     def __init__(self, port, verbose):
         super().__init__(port, verbose)
-        global VERBOSE
-        VERBOSE = verbose
+        self.verbose = verbose
         # Configure dial mode to none
         self.config({'DM': 0})
 
@@ -39,7 +38,7 @@ class DTMFPhone(BasicPhone):
         print("*** WAIT (OFFHOOK)")
         sd.play(self.dial_tone[0], self.dial_tone[1], loop=True)
 
-        decoder = DTFMDecoder(VERBOSE, SAMPLERATE)
+        decoder = DTFMDecoder(self.verbose, SAMPLERATE)
 
         # Setup audio input and start monitoring dialed numbers
         q = queue.Queue()
@@ -60,18 +59,20 @@ class DTMFPhone(BasicPhone):
         istream.start()
         decoder.start()
 
+        def process_data():
+            while not q.empty():
+                data = q.get_nowait()
+                if recordfile:
+                    recordfile.write(data)
+                decoder.process(data, lambda symbol: self.key(symbol))
+
         while True:
             (ev, params, state) = self.update()
             if state != State.WAIT:
                 break
-            try:
-                while True:
-                    data = q.get(False)
-                    if recordfile:
-                        recordfile.write(data)
-                    decoder.process(data, lambda symbol: self.key(symbol))
-            except queue.Empty:
-                pass
+
+            process_data()
+
         istream.stop()
         istream.close()
         if recordfile:

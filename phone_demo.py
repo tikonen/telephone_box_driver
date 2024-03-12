@@ -3,12 +3,11 @@ import os
 import sys
 import time
 import queue
-import serial.tools.list_ports
 
 import sounddevice as sd
 import soundfile as sf
 
-from telephonebox import Event, State, Command, CommandConnection, Driver
+from telephonebox import Event, State, Command
 from basicphone import BasicPhone
 from dtmfphone import DTMFPhone
 from phone_util import load_model_config, adjust_volume
@@ -21,6 +20,7 @@ ELEVATOR_MUSIC = 'Elevator-music.wav'
 MUSIC = 'Last Ninja 1-1.wav'
 BEEPS = 'clock_sync_beeps.wav'
 SPEECH = 'The Matrix Agent Smith Monologue.wav'
+NOT_IN_SERVICE = 'not_in_service.mp3'
 
 
 # Implement few numbers that have a distinct logic
@@ -35,7 +35,7 @@ class PhoneCallDemo(BasicPhone):
             return elapsed >= 6
         elif number == '911':
             return False  # Never answer
-        elif elapsed >= 4:
+        elif elapsed >= 6:
             return True
         return False
 
@@ -54,9 +54,13 @@ class PhoneCallDemo(BasicPhone):
             # Play a track once
             music = sf.read(os.path.join(AUDIO_PATH, MUSIC), dtype='float32')
             phone_audio.play_audio(music, loop=False)
-        else:
+        elif number == '123':
             # play few beeps and end the call
             beeps = sf.read(os.path.join(AUDIO_PATH, BEEPS), dtype='float32')
+            phone_audio.play_audio(beeps, loop=False)
+        else:
+            beeps = sf.read(os.path.join(
+                AUDIO_PATH, NOT_IN_SERVICE), dtype='float32')
             phone_audio.play_audio(beeps, loop=False)
 
         # Wait until track ends or the phone hangs up
@@ -210,6 +214,7 @@ def main():
         print("Finding PhoneBox")
         if verbose_level:
             print("Serial ports:")
+        import serial.tools.list_ports
         ports = list(serial.tools.list_ports.comports())
         for p in ports:
             if verbose_level:
@@ -236,6 +241,7 @@ def main():
         print("WARNING: No input audio device")
 
     print("Connecting...")
+    from telephonebox import CommandConnection, Driver
     cc = CommandConnection(verbose_level)
     cc.open_port(port, timeoutms=500)
     driver = Driver(cc, verbose=verbose_level)

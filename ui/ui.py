@@ -88,6 +88,7 @@ number = []
 
 
 def handle_event(ev, params, state):
+    global number
     if ev == Event.STATE:
         statename = params[0]
         if state == State.IDLE:
@@ -121,7 +122,8 @@ def handle_event(ev, params, state):
             ringbutton.highlight = True
     if ev == Event.DIAL:
         key = params[0]
-        number.insert(-1, key)
+        number.append(key)
+        number = number[-9:]
         diallabel.settext(sysfont_large, ''.join(number))
         keypadbutton = keypad.button(key)
         keypadbutton.highlight = True
@@ -274,6 +276,7 @@ def loop_emulation(driver):
                 key = kpbutton.text
                 dtmfplayer.beep(key)
                 number.append(key)
+                number = number[-9:]  # keep last 9 numbers
                 diallabel.settext(sysfont_large, ''.join(number))
                 driver.set_state(State.DIAL)
                 driver.put_event(Event.DIAL_BEGIN)
