@@ -1,4 +1,4 @@
-
+import os
 import threading
 import queue
 
@@ -17,9 +17,26 @@ player_pos = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
 sysfont = pygame.font.SysFont(pygame.font.get_default_font(), 32)
 sysfont_large = pygame.font.SysFont(pygame.font.get_default_font(), 50)
 
+ASSET_DIR = 'assets'
+DP_BASE = 'dialphone_base.png'
+DP_DIAL = 'dialphone_dial.png'
+DP_FINGERHOOK = 'dialphone_fingerhook.png'
+
+
+def load_assets(obj):
+    assetpath = os.path.join(os.path.dirname(__file__), ASSET_DIR)
+    obj.dp_base = pygame.image.load(os.path.join(assetpath, DP_BASE))
+    obj.dp_dial = pygame.image.load(os.path.join(assetpath, DP_DIAL))
+    obj.dp_fingerhook = pygame.image.load(
+        os.path.join(assetpath, DP_FINGERHOOK))
+
 
 ##########################
 # UI elements
+
+class Box:  # Helper class
+    __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
+
 
 keypad = KeyPad(sysfont, center)
 
@@ -43,21 +60,59 @@ dialerrorlabel.hidden = True
 errorblinker = Blinker(dialerrorlabel, 0.5)
 selectblinker = None
 
+
+class RotaryDial:
+
+    def __init__(self, center):
+        self.anim = None
+        assets = Box()
+        load_assets(assets)
+
+        self.dp_base = Drawable(assets.dp_base)
+        self.dp_base.rect.center = center
+        self.dp_dial = Drawable(assets.dp_dial)
+        self.dp_fingerhook = Drawable(assets.dp_fingerhook)
+        self.dp_dial.rect.center = self.dp_base.rect.center
+        self.dp_fingerhook.rect.center = self.dp_base.rect.center
+        self.dp_fingerhook.rect.move_ip(68, 125)
+
+    def rotation(self, angle):
+        self.dp_dial.rotation = angle
+
+    def moveto(self, n):
+        if n == 0:
+            n = 10
+        angle = (n + 2) * (360/13)
+        angle -= 5  # tweak angle to fit assets better
+        self.anim = Animation(Animation.easeInQuint, 0.5 + n*0.08,
+                              lambda t: self.rotation(-angle * t))
+        self.anim.next = Timer(0.3)  # Pause
+        self.anim.next.next = Animation(
+            Animation.easeLin, 0.3 + n * 0.1, lambda t: self.rotation(-angle * (1 - t)))
+
+    def update(self, dt):
+        if self.anim and self.anim.update(dt):
+            self.anim = self.anim.next
+
+    def draw(self, surface):
+        self.dp_base.draw(surface)
+        self.dp_dial.draw(surface)
+        self.dp_fingerhook.draw(surface)
+
+
+rotarydial = RotaryDial((230, center.y))
+
 drawables = [
     # background,
     keypad,
     hookbutton,
     ringbutton,
     dialerrorlabel,
-    diallabel
+    diallabel,
+    rotarydial
 ]
 
 tasks = [errorblinker]
-
-
-class Box:
-    __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
-
 
 effects = Box()
 phone_audio.load_audio(effects)
@@ -227,6 +282,9 @@ def loop_emulation(driver):
                 if event.type == pygame.QUIT:
                     loop_emulation.running = False
                     break
+                if event.type == pygame.KEYDOWN:
+                    if event.key >= pygame.K_0 and event.key <= pygame.K_9:
+                        rotarydial.moveto(event.key - pygame.K_0)
 
             # Dequeue commands from the driver
             (cmd, _) = driver.receive_cmd()

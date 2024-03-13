@@ -1,16 +1,53 @@
+import math
 import pygame
+
+
+class Animation:
+    def __init__(self, easing, t, callback):
+        self.easing = easing
+        self.callback = callback
+        self.timer = Timer(t)
+        self.next = None
+
+    def update(self, dt):
+        ret = self.timer.update(dt)
+        self.callback(self.easing(self.timer.progress()))
+        return ret
+
+    @staticmethod
+    def easeOutExpo(t):
+        return 1 - math.pow(2, -10 * t)
+
+    @staticmethod
+    def easeOutCirc(t):
+        return math.sqrt(1 - math.pow(t - 1, 2))
+
+    @staticmethod
+    def easeInQuint(t):
+        return t * t * t
+
+    @staticmethod
+    def easeLin(t):
+        return t
 
 
 class Drawable():
     def __init__(self, surface):
         self.rect = surface.get_rect()
         self.surface = surface
+        self.rotation = 0
 
     def update(self, dt):
         pass
 
     def draw(self, screen):
-        screen.blit(self.surface, self.rect)
+        if self.rotation:
+            surface = pygame.transform.rotate(self.surface, self.rotation)
+            rect = surface.get_rect()
+            rect.center = self.rect.center
+            screen.blit(surface, rect)
+        else:
+            screen.blit(self.surface, self.rect)
 
 
 class Button:
@@ -138,13 +175,16 @@ class Timer:
     def reset(self):
         self.timer = 0
 
+    def progress(self):
+        return self.timer / self.timeout
+
     def update(self, dt):
         if self.disabled:
             return True
 
         self.timer += dt
         if self.timer >= self.timeout:
-            self.timer %= self.timeout
+            self.timer = self.timeout
             self.disabled = True
             if self.callback:
                 self.callback()
