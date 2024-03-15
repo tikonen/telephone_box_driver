@@ -3,15 +3,18 @@ import pygame
 
 
 class Animation:
-    def __init__(self, easing, t, callback):
+    def __init__(self, easing, t, onupdate, onend=None):
         self.easing = easing
-        self.callback = callback
+        self.onupdate = onupdate
         self.timer = Timer(t)
         self.next = None
+        self.onend = onend
 
     def update(self, dt):
         ret = self.timer.update(dt)
-        self.callback(self.easing(self.timer.progress()))
+        self.onupdate(self.easing(self.timer.progress()))
+        if ret and self.onend:
+            self.onend()
         return ret
 
     @staticmethod
@@ -166,11 +169,11 @@ class Blinker:
 
 
 class Timer:
-    def __init__(self, timeout, callback=None):
+    def __init__(self, timeout, onexpire=None):
         self.timer = 0
         self.disabled = False
         self.timeout = timeout
-        self.callback = callback
+        self.onexpire = onexpire
 
     def reset(self):
         self.timer = 0
@@ -186,8 +189,8 @@ class Timer:
         if self.timer >= self.timeout:
             self.timer = self.timeout
             self.disabled = True
-            if self.callback:
-                self.callback()
+            if self.onexpire:
+                self.onexpire()
             return True
         return False
 

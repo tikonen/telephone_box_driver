@@ -34,8 +34,42 @@ def load_assets(obj):
         os.path.join(assetpath, DP_FINGERHOOK))
 
 
+class StreamAudioPlayer():
+    def __init__(self, samplerate, channels, dtype='float32'):
+        self.samplerate = samplerate
+        self.channels = channels
+        self.dtype = dtype
+
+    def start_audio(self):
+        self.q = queue.Queue()
+
+        def callback(outdata, frames, time, status):
+            if not self.q.empty():
+                data = self.q.get_nowait()
+                outdata[:] = data
+            else:
+                outdata.fill(0)
+
+        self.outs = sd.OutputStream(
+            samplerate=self.samplerate, dtype=self.dtype, latency=0.1, blocksize=1024, channels=self.channels, callback=callback)
+        self.outs.start()
+
+    def queue_audio(self, sample, repeats):
+        audiodata = np.concatenate(
+            [sample for _ in range(0, repeats)], dtype=self.dtype)
+        audiodata = audiodata.reshape(-1, 1)
+        for idx in range(1024, len(audiodata), 1024):
+            self.q.put(audiodata[idx-1024:idx])
+
+        rem = len(audiodata) % 1024
+        if rem:
+            block = np.zeros((1024, 1), dtype=audiodata.dtype)
+            block[:rem] = audiodata[len(audiodata) - rem:]
+            self.q.put(block)
+
 ##########################
 # UI elements
+
 
 class Box:  # Helper class
     __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
@@ -68,6 +102,7 @@ class RotaryDial:
 
     def __init__(self, center):
         self.anim = None
+        self.in_winding = False
         assets = Box()
         load_assets(assets)
 
@@ -80,60 +115,57 @@ class RotaryDial:
         self.dp_fingerhook.rect.move_ip(68, 125)
 
         assetpath = os.path.join(os.path.dirname(__file__), ASSET_DIR)
-        self.wind = sf.read(
+        (self.wind, samplerate) = sf.read(
             os.path.join(assetpath, 'phone_wind.wav'), dtype='float32')
-        self.rewind = sf.read(
+        (self.rewind, samplerate) = sf.read(
             os.path.join(assetpath, 'phone_rewind.wav'), dtype='float32')
 
-        self.start_audio()
-
-    def start_audio(self):
-        self.q = queue.Queue()
-
-        def callback(outdata, frames, time, status):
-            if not self.q.empty():
-                data = self.q.get()
-                outdata[:] = data
-            if self.q.empty():
-                outdata.fill(0)
-
-        self.outs = sd.OutputStream(
-            samplerate=self.rewind[1], dtype='float32', latency=0.1, blocksize=1024, channels=1, callback=callback)
-        self.outs.start()
-
-    def queue_audio(self, sample, repeats):
-        audiodata = np.concatenate(
-            [sample[0] for _ in range(0, repeats)], dtype=sample[0].dtype)
-        audiodata = audiodata.reshape(-1, 1)
-        for idx in range(1024, len(audiodata), 1024):
-            self.q.put(audiodata[idx-1024:idx])
-
-        rem = len(audiodata) % 1024
-        if rem:
-            block = np.zeros((1024, 1), dtype=audiodata.dtype)
-            block[:rem] = audiodata[len(audiodata) - rem:]
-            self.q.put(block)
+        self.streamplayer = StreamAudioPlayer(
+            samplerate=samplerate, channels=1, dtype=self.wind.dtype)
+        self.streamplayer.start_audio()
 
     def rotation(self, angle):
         self.dp_dial.rotation = angle
 
-    def moveto(self, n):
+    def _winding_end(self):
+        self.in_winding = False
+
+    def dial_rewind(self, n):
+        if not self.in_winding:
+            return
+        if n == 0:
+            n = 10
+        angle = (n + 2) * (360/13)
+        angle -= 5  # tweak angle to fit assets better
+
+        rewindanim = Animation(
+            Animation.easeLin, 0.3 + n * 0.1, lambda t: self.rotation(-angle * (1 - t)))
+        rewindanim.onend = lambda: self._winding_end()
+
+        if self.anim:
+            # Pause
+            self.anim.next = Timer(
+                0.2, lambda: self.streamplayer.queue_audio(self.rewind, n + 2))
+            # Rewind
+            self.anim.next.next = rewindanim
+        else:
+            # Rewind
+            self.streamplayer.queue_audio(self.rewind, n + 2)
+            self.anim = rewindanim
+
+    def dial_wind(self, n):
+        if self.in_winding:
+            return
+        self.in_winding = True
         if n == 0:
             n = 10
         angle = (n + 2) * (360/13)
         angle -= 5  # tweak angle to fit assets better
 
         # Setup animation and effects
-        # Winding
-        self.queue_audio(self.wind, n+2)
+        self.streamplayer.queue_audio(self.wind, n+2)
         self.anim = Animation(Animation.easeLin, 0.3 + n*0.1,
                               lambda t: self.rotation(-angle * t))
-        # Pause
-        self.anim.next = Timer(
-            0.3, lambda: self.queue_audio(self.rewind, n + 2))
-        # Rewind
-        self.anim.next.next = Animation(
-            Animation.easeLin, 0.3 + n * 0.1, lambda t: self.rotation(-angle * (1 - t)))
 
     def update(self, dt):
         if self.anim and self.anim.update(dt):
@@ -327,9 +359,12 @@ def loop_emulation(driver):
                 if event.type == pygame.QUIT:
                     loop_emulation.running = False
                     break
-                if event.type == pygame.KEYDOWN:
+                elif event.type == pygame.KEYDOWN:
                     if event.key >= pygame.K_0 and event.key <= pygame.K_9:
-                        rotarydial.moveto(event.key - pygame.K_0)
+                        rotarydial.dial_wind(event.key - pygame.K_0)
+                elif event.type == pygame.KEYUP:
+                    if event.key >= pygame.K_0 and event.key <= pygame.K_9:
+                        rotarydial.dial_rewind(event.key - pygame.K_0)
 
             # Dequeue commands from the driver
             (cmd, _) = driver.receive_cmd()
