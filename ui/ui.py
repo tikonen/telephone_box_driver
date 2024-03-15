@@ -39,6 +39,7 @@ class StreamAudioPlayer():
         self.samplerate = samplerate
         self.channels = channels
         self.dtype = dtype
+        self.blocksize = 1024
 
     def start_audio(self):
         self.q = queue.Queue()
@@ -51,19 +52,20 @@ class StreamAudioPlayer():
                 outdata.fill(0)
 
         self.outs = sd.OutputStream(
-            samplerate=self.samplerate, dtype=self.dtype, latency=0.1, blocksize=1024, channels=self.channels, callback=callback)
+            samplerate=self.samplerate, dtype=self.dtype, latency=0.1, blocksize=self.blocksize, channels=self.channels, callback=callback)
         self.outs.start()
 
     def queue_audio(self, sample, repeats):
+        blocksize = self.blocksize
         audiodata = np.concatenate(
             [sample for _ in range(0, repeats)], dtype=self.dtype)
         audiodata = audiodata.reshape(-1, 1)
-        for idx in range(1024, len(audiodata), 1024):
-            self.q.put(audiodata[idx-1024:idx])
+        for idx in range(blocksize, len(audiodata), blocksize):
+            self.q.put(audiodata[idx-blocksize:idx])
 
-        rem = len(audiodata) % 1024
+        rem = len(audiodata) % blocksize
         if rem:
-            block = np.zeros((1024, 1), dtype=audiodata.dtype)
+            block = np.zeros((blocksize, 1), dtype=audiodata.dtype)
             block[:rem] = audiodata[len(audiodata) - rem:]
             self.q.put(block)
 
@@ -100,6 +102,56 @@ selectblinker = None
 
 class RotaryDial:
 
+    class RoundButton:
+        def __init__(self, pos, radius):
+            self.pos = pos
+            self.radius = radius
+            self.hover = False
+            self.clicked = False
+            self.pressed = False
+            self.clickable = True
+            self.disabled = False
+            self.debug = False
+
+            radius = 25
+            self.surface0 = pygame.Surface((radius*2+1, radius*2+1))
+            self.surface0.set_colorkey((0, 0, 0))
+            self.surface0.set_alpha(200)
+            pygame.draw.circle(self.surface0, 'white',
+                               (radius, radius), self.radius)
+
+            self.surface1 = pygame.Surface((radius*2+1, radius*2+1))
+            self.surface1.set_colorkey((0, 0, 0))
+            self.surface1.set_alpha(128)
+            pygame.draw.circle(self.surface1, 'red',
+                               (radius, radius), self.radius)
+
+        def update(self, dt):
+            self.clicked = False
+            if not self.clickable:
+                return
+            (l, _, _) = pygame.mouse.get_pressed()
+            hover = self.pos.distance_to(pygame.mouse.get_pos()) < self.radius
+
+            if hover and not self.hover and not l:
+                self.hover = hover
+            elif not hover:
+                self.hover = hover
+            self.clicked = self.pressed and not l and not self.disabled
+            self.pressed = self.hover and l and not self.disabled
+
+        def draw(self, screen):
+            self.surface0.blit(screen, self.pos)
+            r = self.surface0.get_rect()
+            r.center = self.pos
+            if self.hover:
+                screen.blit(
+                    self.surface1 if self.pressed else self.surface0, r)
+
+            if self.debug:
+                pygame.draw.circle(
+                    screen, 'blue' if self.pressed else 'red', self.pos, self.radius)
+
     def __init__(self, center):
         self.anim = None
         self.in_winding = False
@@ -113,6 +165,14 @@ class RotaryDial:
         self.dp_dial.rect.center = self.dp_base.rect.center
         self.dp_fingerhook.rect.center = self.dp_base.rect.center
         self.dp_fingerhook.rect.move_ip(68, 125)
+
+        self.buttons = []
+        pos = pygame.math.Vector2(0, 120)
+        for n in range(0, 10):
+            bpos = pos.rotate(
+                n * (360/13)) + self.dp_dial.rect.center
+            button = RotaryDial.RoundButton(bpos, 25)
+            self.buttons.append(button)
 
         assetpath = os.path.join(os.path.dirname(__file__), ASSET_DIR)
         (self.wind, samplerate) = sf.read(
@@ -168,13 +228,19 @@ class RotaryDial:
                               lambda t: self.rotation(-angle * t))
 
     def update(self, dt):
-        if self.anim and self.anim.update(dt):
+        if not self.anim:
+            for button in self.buttons:
+                button.update(dt)
+        elif self.anim.update(dt):
             self.anim = self.anim.next
 
     def draw(self, surface):
         self.dp_base.draw(surface)
         self.dp_dial.draw(surface)
         self.dp_fingerhook.draw(surface)
+
+        for button in self.buttons:
+            button.draw(screen)
 
 
 rotarydial = RotaryDial((230, center.y))
