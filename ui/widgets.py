@@ -5,16 +5,16 @@ import pygame
 class Animation:
     def __init__(self, easing, t, onupdate, onend=None):
         self.easing = easing
-        self.onupdate = onupdate
+        self.on_update = onupdate
         self.timer = Timer(t)
         self.next = None
-        self.onend = onend
+        self.on_end = onend
 
     def update(self, dt):
         ret = self.timer.update(dt)
-        self.onupdate(self.easing(self.timer.progress()))
-        if ret and self.onend:
-            self.onend()
+        self.on_update(self.easing(self.timer.progress()))
+        if ret and self.on_end:
+            self.on_end()
         return ret
 
     @staticmethod
@@ -32,6 +32,10 @@ class Animation:
     @staticmethod
     def easeLin(t):
         return t
+
+    @staticmethod
+    def easeOutQuad(t):
+        return 1 - (1 - t) * (1 - t)
 
 
 class Drawable():
@@ -173,7 +177,7 @@ class Timer:
         self.timer = 0
         self.disabled = False
         self.timeout = timeout
-        self.onexpire = onexpire
+        self.on_expire = onexpire
 
     def reset(self):
         self.timer = 0
@@ -189,8 +193,8 @@ class Timer:
         if self.timer >= self.timeout:
             self.timer = self.timeout
             self.disabled = True
-            if self.onexpire:
-                self.onexpire()
+            if self.on_expire:
+                self.on_expire()
             return True
         return False
 
