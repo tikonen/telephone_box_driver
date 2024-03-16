@@ -57,34 +57,54 @@ class Drawable():
             screen.blit(self.surface, self.rect)
 
 
-class Button:
-    def __init__(self, font, text, rect, highlightcolor='green', highlighttext=None, disabledhighlightcolor=None):
-        self.text = text
-        self.settext(font, text, highlighttext)
-        self.rect = rect
+class AbstractButton:
+    def __init__(self):
         self.highlight = False
         self.clicked = False
         self.hover = False
         self.pressed = False
-        self.highlightcolor = highlightcolor
-        self.disabledhighlightcolor = disabledhighlightcolor if disabledhighlightcolor else self.highlightcolor
         self.disabled = False
         self.clickable = True
         self.hidden = False
+        self.drag = False
+        self.dragstart = False
+        self.dragend = False
+
+    def hittest(self, pos):
+        raise "Not Implemented"
 
     def update(self, dt):
         self.clicked = False
         if not self.clickable:
             return
-        r = self.rect
         (l, _, _) = pygame.mouse.get_pressed()
-        hover = r.collidepoint(pygame.mouse.get_pos())
+        hover = self.hittest(pygame.mouse.get_pos())
         if hover and not self.hover and not l:
             self.hover = hover
         elif not hover:
             self.hover = hover
         self.clicked = self.pressed and not l and not self.disabled
+        drag = l and (self.drag or (self.pressed and not hover))
+        self.dragstart = not self.drag and drag
+        self.dragend = self.drag and not drag
+        self.drag = drag
         self.pressed = self.hover and l and not self.disabled
+
+    def draw(self, screen):
+        pass
+
+
+class Button(AbstractButton):
+    def __init__(self, font, text, rect, highlightcolor='green', highlighttext=None, disabledhighlightcolor=None):
+        super().__init__()
+        self.rect = rect
+        self.text = text
+        self.settext(font, text, highlighttext)
+        self.highlightcolor = highlightcolor
+        self.disabledhighlightcolor = disabledhighlightcolor if disabledhighlightcolor else self.highlightcolor
+
+    def hittest(self, pos):
+        return self.rect.collidepoint(pos)
 
     def draw(self, screen):
         if self.hidden:
@@ -197,62 +217,3 @@ class Timer:
                 self.on_expire()
             return True
         return False
-
-
-class KeyPad:
-    def __init__(self, font, center):
-        s = 10  # spacing
-        w = h = 50
-        r = pygame.Rect(0, 0, w, h)
-        buttons = [
-            Button(font, "1", r.move(0*(w+s), 0*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "2", r.move(1*(w+s), 0*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "3", r.move(2*(w+s), 0*(w+s)),
-                   disabledhighlightcolor='green'),
-
-            Button(font, "4", r.move(0*(w+s), 1*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "5", r.move(1*(w+s), 1*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "6", r.move(2*(w+s), 1*(w+s)),
-                   disabledhighlightcolor='green'),
-
-            Button(font, "7", r.move(0*(w+s), 2*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "8", r.move(1*(w+s), 2*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "9", r.move(2*(w+s), 2*(w+s)),
-                   disabledhighlightcolor='green'),
-
-            Button(font, "*", r.move(0*(w+s), 3*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "0", r.move(1*(w+s), 3*(w+s)),
-                   disabledhighlightcolor='green'),
-            Button(font, "#", r.move(2*(w+s), 3*(w+s)),
-                   disabledhighlightcolor='green'),
-        ]
-        self.rect = pygame.Rect(0, 0, 0, 0).unionall(
-            [button.rect for button in buttons])
-        self.rect.center = center
-        for button in buttons:
-            button.rect.move_ip(self.rect.left, self.rect.top)
-        self.buttons = buttons
-        self.disabled = False
-
-    def button(self, key):
-        return next((b for b in self.buttons if b.text == key), None)
-
-    def update(self, dt):
-        self.clicked = None
-        for b in self.buttons:
-            b.disabled = self.disabled
-            b.update(dt)
-            if b.clicked:
-                self.clicked = b
-        return self.clicked
-
-    def draw(self, screen):
-        for b in self.buttons:
-            b.draw(screen)

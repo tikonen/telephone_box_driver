@@ -1,2 +1,2 @@
 
-from .widgets import KeyPad, Button, Label, Blinker
+from .widgets import Button, Label, Blinker

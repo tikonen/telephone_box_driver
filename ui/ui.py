@@ -1,13 +1,12 @@
-import os
 import threading
 import queue
 
-import soundfile as sf
-import sounddevice as sd
-import numpy as np
 import pygame
 
 from .widgets import *
+from .util import *
+from .rotarydial import RotaryDial
+from .keypad import KeyPad
 from telephonebox import Event, State, Command, LineState
 import phone_audio
 
@@ -20,66 +19,8 @@ player_pos = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
 sysfont = pygame.font.SysFont(pygame.font.get_default_font(), 32)
 sysfont_large = pygame.font.SysFont(pygame.font.get_default_font(), 50)
 
-ASSET_DIR = 'assets'
-DP_BASE = 'dialphone_base.png'
-DP_DIAL = 'dialphone_dial.png'
-DP_FINGERHOOK = 'dialphone_fingerhook.png'
-
-
-def load_rotarydial_assets(obj):
-    assetpath = os.path.join(os.path.dirname(__file__), ASSET_DIR)
-    obj.dp_base = pygame.image.load(os.path.join(assetpath, DP_BASE))
-    obj.dp_dial = pygame.image.load(os.path.join(assetpath, DP_DIAL))
-    obj.dp_fingerhook = pygame.image.load(
-        os.path.join(assetpath, DP_FINGERHOOK))
-
-
-class StreamAudioPlayer():
-    def __init__(self, samplerate, channels, dtype='float32'):
-        self.samplerate = samplerate
-        self.channels = channels
-        self.dtype = dtype
-        self.blocksize = 1024
-
-    def start_audio(self):
-        self.q = queue.Queue()
-
-        def callback(outdata, frames, time, status):
-            if not self.q.empty():
-                data = self.q.get_nowait()
-                outdata[:] = data
-            else:
-                outdata.fill(0)
-
-        self.outs = sd.OutputStream(
-            samplerate=self.samplerate, dtype=self.dtype, latency=0.1, blocksize=self.blocksize, channels=self.channels, callback=callback)
-        self.outs.start()
-
-    def queue_audio(self, sample, repeats):
-        blocksize = self.blocksize
-        audiodata = np.concatenate(
-            [sample for _ in range(0, repeats)], dtype=self.dtype)
-        audiodata = audiodata.reshape(-1, 1)
-        for idx in range(blocksize, len(audiodata), blocksize):
-            self.q.put(audiodata[idx-blocksize:idx])
-
-        rem = len(audiodata) % blocksize
-        if rem:
-            block = np.zeros((blocksize, 1), dtype=audiodata.dtype)
-            block[:rem] = audiodata[len(audiodata) - rem:]
-            self.q.put(block)
-
-    def clear_audio(self):
-        self.q = queue.Queue()
-
 ##########################
 # UI elements
-
-
-class Box:  # Helper class
-    __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
-
-
 keypad = KeyPad(sysfont, center)
 
 hookbutton = Button(sysfont, "ON-HOOK",
@@ -102,205 +43,9 @@ dialerrorlabel.hidden = True
 errorblinker = Blinker(dialerrorlabel, 0.5)
 selectblinker = None
 
-
-class RotaryDial:
-
-    class RotaryDialButton:
-        def __init__(self, key, pos, radius):
-            self.key = key
-            self.pos = pos
-            self.radius = radius
-            self.hover = False
-            self.clicked = False
-            self.pressed = False
-            self.clickable = True
-            self.disabled = False
-            self.drag = False
-            self.dragstart = False
-            self.dragend = False
-            self.debug = False
-
-            radius = 25
-            self.surface0 = pygame.Surface((radius*2+1, radius*2+1))
-            self.surface0.set_colorkey((0, 0, 0))
-            self.surface0.set_alpha(200)
-            pygame.draw.circle(self.surface0, 'white',
-                               (radius, radius), self.radius)
-
-            self.surface1 = pygame.Surface((radius*2+1, radius*2+1))
-            self.surface1.set_colorkey((0, 0, 0))
-            self.surface1.set_alpha(128)
-            pygame.draw.circle(self.surface1, 'green',
-                               (radius, radius), self.radius)
-
-        def update(self, dt):
-            self.clicked = False
-            if not self.clickable:
-                return
-            (l, _, _) = pygame.mouse.get_pressed()
-            hover = self.pos.distance_to(pygame.mouse.get_pos()) < self.radius
-
-            if hover and not self.hover and not l:
-                self.hover = hover
-            elif not hover:
-                self.hover = hover
-            self.clicked = self.pressed and not l and not self.disabled
-            drag = l and (self.drag or (self.pressed and not hover))
-            self.dragstart = not self.drag and drag
-            self.dragend = self.drag and not drag
-            self.drag = drag
-            self.pressed = self.hover and l and not self.disabled
-
-        def draw(self, screen):
-            self.surface0.blit(screen, self.pos)
-            r = self.surface0.get_rect()
-            r.center = self.pos
-            if self.hover:
-                screen.blit(
-                    self.surface1 if self.pressed else self.surface0, r)
-
-            if self.debug:
-                color = 'green' if self.drag else (
-                    'blue' if self.pressed else 'red')
-                pygame.draw.circle(screen, color, self.pos, self.radius)
-
-    def __init__(self, center):
-        self.anim = None
-        self.in_winding = False
-        self.in_hold = False
-        self.dialed = None
-        self.clicked = None
-        assets = Box()
-        load_rotarydial_assets(assets)
-
-        self.dp_base = Drawable(assets.dp_base)
-        self.dp_base.rect.center = center
-        self.dp_dial = Drawable(assets.dp_dial)
-        self.dp_fingerhook = Drawable(assets.dp_fingerhook)
-        self.dp_dial.rect.center = self.dp_base.rect.center
-        self.dp_fingerhook.rect.center = self.dp_base.rect.center
-        self.dp_fingerhook.rect.move_ip(68, 125)
-
-        self.buttons = []
-        pos = pygame.math.Vector2(0, 120)
-        nums = [0] + list(range(9, 0, -1))
-        for n in range(0, 10):
-            bpos = pos.rotate(
-                n * (360/13)) + self.dp_dial.rect.center
-            button = RotaryDial.RotaryDialButton(str(nums[n]), bpos, 25)
-            self.buttons.append(button)
-
-        assetpath = os.path.join(os.path.dirname(__file__), ASSET_DIR)
-        (self.wind, samplerate) = sf.read(
-            os.path.join(assetpath, 'phone_wind.wav'), dtype='float32')
-        (self.rewind, samplerate) = sf.read(
-            os.path.join(assetpath, 'phone_rewind.wav'), dtype='float32')
-
-        self.streamplayer = StreamAudioPlayer(
-            samplerate=samplerate, channels=1, dtype=self.wind.dtype)
-        self.streamplayer.start_audio()
-
-    def rotation(self, angle):
-        self.dp_dial.rotation = angle
-
-    def _winding_end(self):
-        self.in_hold = True
-
-    def _rewinding_end(self, dialed):
-        self.in_winding = False
-        self.dialed = dialed
-        self.rotation(0)
-
-    def dial_cancel(self):
-        # winding is canceled. Dial returns to starting position from the current position
-        if not self.in_winding:
-            return
-
-        self.streamplayer.clear_audio()
-
-        angle = self.dp_dial.rotation
-        steps = abs(angle / (360/13))
-
-        rewindanim = Animation(
-            Animation.easeLin, steps * 0.1, lambda t: self.rotation(angle * (1 - t)))
-        steps = round(steps) - 1
-        if steps > 0:
-            self.streamplayer.queue_audio(self.rewind, round(steps))
-
-        # rewindanim.onend = lambda: self._rewinding_end(-1)
-        steps -= 1
-        if steps <= 0:
-            steps = -1
-        rewindanim.on_end = lambda: self._rewinding_end(steps)
-        self.anim = rewindanim
-
-    def dial_rewind(self, n, cancel=True):
-        # dial is released and starts rewinding back to the starting position
-        if not self.in_winding:
-            return
-        if cancel and not self.in_hold:
-            self.dial_cancel()
-            return
-        self.in_hold = False
-        count = n if n != 0 else 10
-        angle = (count + 2) * (360/13)
-        angle -= 5  # tweak angle to fit assets better
-
-        rewindanim = Animation(
-            Animation.easeLin, 0.3 + count * 0.1, lambda t: self.rotation(-angle * (1 - t)))
-        rewindanim.on_end = lambda: self._rewinding_end(n)
-
-        if self.anim:
-            # Pause
-            self.anim.next = Timer(
-                0.2, lambda: self.streamplayer.queue_audio(self.rewind, count + 2))
-            # Rewind
-            self.anim.next.next = rewindanim
-        else:
-            # Rewind
-            self.streamplayer.queue_audio(self.rewind, count + 2)
-            self.anim = rewindanim
-
-    def dial_wind(self, n):
-        # dial winds the selected number position back until it reaches the stop (fingerguard)
-        if self.in_winding:
-            return
-        self.in_winding = True
-        count = n if n != 0 else 10
-        angle = (count + 2) * (360/13)
-        angle -= 5  # tweak angle to fit assets better
-
-        # Setup animation and effects
-        self.streamplayer.queue_audio(self.wind, count+2)
-        self.anim = Animation(Animation.easeLin, 0.3 + count*0.1,
-                              lambda t: self.rotation(-angle * t))
-        self.anim.on_end = lambda: self._winding_end()
-
-    def update(self, dt):
-        self.clicked = None
-        self.dialed = None
-        if self.anim and self.anim.update(dt):
-            self.anim = self.anim.next
-
-        for b in self.buttons:
-            b.update(dt)
-            if not self.in_winding and b.clicked or b.dragstart or b.dragend:
-                self.clicked = b
-
-    def draw(self, surface):
-        self.dp_base.draw(surface)
-        self.dp_dial.draw(surface)
-        self.dp_fingerhook.draw(surface)
-
-        if not self.in_winding:
-            for b in self.buttons:
-                b.draw(screen)
-
-
 rotarydial = RotaryDial((230, center.y))
 
 drawables = [
-    # background,
     keypad,
     hookbutton,
     ringbutton,
