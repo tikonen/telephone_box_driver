@@ -217,6 +217,56 @@ def loop_emulation(driver):
 
     ringing_tasks = []
 
+    KEYMAP = {
+        pygame.K_0: 0,
+        pygame.K_1: 1,
+        pygame.K_2: 2,
+        pygame.K_3: 3,
+        pygame.K_4: 4,
+        pygame.K_5: 5,
+        pygame.K_6: 6,
+        pygame.K_7: 7,
+        pygame.K_8: 8,
+        pygame.K_9: 9,
+        pygame.K_HASH: '#',
+        pygame.K_ASTERISK: '*',
+
+        # keypad
+        #
+        pygame.K_KP0: 0,
+        pygame.K_KP1: 1,
+        pygame.K_KP2: 2,
+        pygame.K_KP3: 3,
+        pygame.K_KP4: 4,
+        pygame.K_KP5: 5,
+        pygame.K_KP6: 6,
+        pygame.K_KP7: 7,
+        pygame.K_KP8: 8,
+        pygame.K_KP9: 9,
+        pygame.K_KP_DIVIDE: '#',
+        pygame.K_KP_MULTIPLY: '*'
+
+    }
+
+    def check_key_event(event):
+        if event.type in (pygame.KEYDOWN, pygame.KEYUP):
+            if event.key in KEYMAP:
+                return (True, KEYMAP[event.key])
+        return (False, None)
+
+    def on_keypad_clicked(kpbutton):
+        kpbutton.highlight = True
+        tasks.append(Blinker(kpbutton, 0.1, 3))
+        key = kpbutton.text
+        dtmfplayer.beep(key)
+        number.append(key)
+        number[:] = number[-9:]  # keep last 9 numbers
+        diallabel.settext(sysfont_large, ''.join(number))
+        driver.set_state(State.DIAL)
+        driver.put_event(Event.DIAL_BEGIN)
+        driver.put_event(Event.DIAL, [key])
+        driver.set_state(State.WAIT)
+
     try:
         while loop_emulation.running:
             # pygame.QUIT event means the user clicked X to close your window
@@ -224,12 +274,20 @@ def loop_emulation(driver):
                 if event.type == pygame.QUIT:
                     loop_emulation.running = False
                     break
-                elif event.type == pygame.KEYDOWN:
-                    if event.key >= pygame.K_0 and event.key <= pygame.K_9:
-                        rotarydial.dial_wind(event.key - pygame.K_0)
-                elif event.type == pygame.KEYUP:
-                    if event.key >= pygame.K_0 and event.key <= pygame.K_9:
-                        rotarydial.dial_rewind(event.key - pygame.K_0)
+                else:
+                    (match, key) = check_key_event(event)
+                    if match:
+                        if True:
+                            if event.type == pygame.KEYDOWN:
+                                rotarydial.dial_wind(key)
+                                if driver.get_state() == State.WAIT:
+                                    driver.set_state(State.DIAL)
+                                    driver.put_event(Event.DIAL_BEGIN)
+                            elif event.type == pygame.KEYUP:
+                                rotarydial.dial_rewind(key)
+                        else:
+                            if event.type == pygame.KEYDOWN:
+                                on_keypad_clicked(keypad.button(str(key)))
 
             # Dequeue commands from the driver
             (cmd, _) = driver.receive_cmd()
@@ -254,15 +312,21 @@ def loop_emulation(driver):
                 b = rotarydial.clicked
                 if b.dragstart:
                     rotarydial.dial_wind(int(b.key))
+                    if driver.get_state() == State.WAIT:
+                        driver.set_state(State.DIAL)
+                        driver.put_event(Event.DIAL_BEGIN)
                 elif b.dragend:
                     rotarydial.dial_rewind(int(b.key))
             if rotarydial.dialed is not None:
                 key = rotarydial.dialed
                 print("ROTARY: ", key)
-                if key >= 0:
-                    number.append(str(key))
-                    number = number[-9:]  # keep last 9 numbers
-                    diallabel.settext(sysfont_large, ''.join(number))
+                if driver.get_state() == State.DIAL:
+                    if key >= 0:
+                        number.append(str(key))
+                        number = number[-9:]  # keep last 9 numbers
+                        diallabel.settext(sysfont_large, ''.join(number))
+                        driver.put_event(Event.DIAL, [str(key)])
+                    driver.set_state(State.WAIT)
 
             if hookbutton.clicked:
                 hookbutton.highlight = not hookbutton.highlight
@@ -287,18 +351,7 @@ def loop_emulation(driver):
                     diallabel.settext(sysfont_large, 'READY')
 
             if keypad.clicked:
-                kpbutton = keypad.clicked
-                kpbutton.highlight = True
-                tasks.append(Blinker(kpbutton, 0.1, 3))
-                key = kpbutton.text
-                dtmfplayer.beep(key)
-                number.append(key)
-                number = number[-9:]  # keep last 9 numbers
-                diallabel.settext(sysfont_large, ''.join(number))
-                driver.set_state(State.DIAL)
-                driver.put_event(Event.DIAL_BEGIN)
-                driver.put_event(Event.DIAL, [key])
-                driver.set_state(State.WAIT)
+                on_keypad_clicked(keypad.clicked)
 
             # Update tasks and remove them from list if they are done
             tasks = [

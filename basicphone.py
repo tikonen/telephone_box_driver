@@ -67,10 +67,12 @@ class BasicPhone():
                 else:
                     self.ringing(''.join(digits))
                 break
+            elif ev == Event.DIAL_BEGIN:
+                timeout = time.time() + 5
             elif ev == Event.DIAL:
                 print('Digit', params[0])
                 digits.append(params[0])
-                timeout = time.time() + 3  # wait 3 seconds for each digit
+                timeout = time.time() + 3  # wait few seconds for each digit
                 if len(digits) > 15:
                     self.dial_error()
                     break

@@ -152,21 +152,6 @@ class Label(Button):
         self.pressed = True
         self.disabled = False
 
-#    def draw(self, screen):
-#        r = self.rect
-#
-#        pygame.draw.rect(screen, "black", r, width=0, border_radius=5)
-#        if self.highlight:
-#            hcolor = self.disabledhighlightcolor if self.disabled else self.highlightcolor
-#            pygame.draw.rect(screen, hcolor, r.inflate(-15, -15),
-#                             width=0, border_radius=5)
-#
-#        pygame.draw.rect(screen, "grey", r, width=2, border_radius=5)
-#
-#        r2 = self.surface0.get_rect()
-#        r2.center = r.center
-#        screen.blit(self.surface1 if self.highlight else self.surface2, r2)
-
 
 class Blinker:
     def __init__(self, item, cycle=1.0, count=-1):
