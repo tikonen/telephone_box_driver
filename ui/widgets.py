@@ -58,6 +58,10 @@ class Drawable():
 
 
 class AbstractButton:
+
+    mouse = (False, False, False)
+    position = (0, 0)
+
     def __init__(self):
         self.highlight = False
         self.clicked = False
@@ -77,8 +81,10 @@ class AbstractButton:
         self.clicked = False
         if not self.clickable:
             return
-        (l, _, _) = pygame.mouse.get_pressed()
-        hover = self.hittest(pygame.mouse.get_pos())
+        (l, _, _) = AbstractButton.mouse
+        hover = self.hittest(AbstractButton.position)
+        # (l, _, _) = pygame.mouse.get_pressed()
+        # hover = self.hittest(pygame.mouse.get_pos())
         if hover and not self.hover and not l:
             self.hover = hover
         elif not hover:

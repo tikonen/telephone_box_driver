@@ -60,17 +60,22 @@ effects = Box()
 phone_audio.load_audio(effects)
 
 
+def draw_base():
+    pygame.draw.rect(screen, "gray40", draw_base.r)
+    pygame.draw.rect(screen, "gray20", draw_base.r.inflate(
+        10, 10), width=10, border_radius=10)
+
+
+draw_base.r = diallabel.rect.copy()
+draw_base.r.inflate_ip(100, 0)
+draw_base.r.height = 550
+draw_base.r.move_ip(0, -40)
+
+
 def draw():
     # fill the screen with a color to wipe away anything from last frame
     screen.fill("midnightblue")
-
-    r = diallabel.rect.copy()
-    r = r.inflate(100, 0)
-    r.height = 550
-    r.move_ip(0, -40)
-    pygame.draw.rect(screen, "gray40", r)
-    r.inflate_ip(10, 10)
-    pygame.draw.rect(screen, "gray20", r, width=10, border_radius=10)
+    draw_base()
 
     for elem in drawables:
         elem.draw(screen)
@@ -130,7 +135,6 @@ def handle_event(ev, params, state):
 
 
 def loop_server(driver):
-    global tasks
     ringbutton.disabled = True
     hookbutton.disabled = True
     hookbutton.clickable = False
@@ -160,6 +164,9 @@ def loop_server(driver):
                     loop_server.running = False
                     break
 
+            AbstractButton.mouse = pygame.mouse.get_pressed()
+            AbstractButton.position = pygame.mouse.get_pos()
+
             # Dequeue events from the driver
             if not q.empty():
                 (ev, params, state) = q.get_nowait()
@@ -176,7 +183,7 @@ def loop_server(driver):
                     driver.command_async(Command.RING)
 
             # Update tasks and remove them from list if they are done
-            tasks = [
+            tasks[:] = [
                 elem for elem in tasks if not elem.update(dt)]
 
             draw()
@@ -195,7 +202,6 @@ def loop_server(driver):
 
 
 def loop_emulation(driver):
-    global tasks
     number = []
 
     ringbutton.disabled = True
@@ -289,6 +295,9 @@ def loop_emulation(driver):
                             if event.type == pygame.KEYDOWN:
                                 on_keypad_clicked(keypad.button(str(key)))
 
+            AbstractButton.mouse = pygame.mouse.get_pressed()
+            AbstractButton.position = pygame.mouse.get_pos()
+
             # Dequeue commands from the driver
             (cmd, _) = driver.receive_cmd()
             if cmd == Command.RING:
@@ -354,9 +363,9 @@ def loop_emulation(driver):
                 on_keypad_clicked(keypad.clicked)
 
             # Update tasks and remove them from list if they are done
-            tasks = [
+            tasks[:] = [
                 elem for elem in tasks if not elem.update(dt)]
-            ringing_tasks = [
+            ringing_tasks[:] = [
                 elem for elem in ringing_tasks if not elem.update(dt)]
 
             draw()
