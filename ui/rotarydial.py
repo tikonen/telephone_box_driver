@@ -114,8 +114,11 @@ class RotaryDial:
         angle = self.dp_dial.rotation
         steps = abs(angle / (360/13))
 
+        # samplelen = len(self.rewind) / samplerate
+        samplelen = 0.1
+        time = steps * samplelen
         rewindanim = Animation(
-            Animation.easeLin, steps * 0.1, lambda t: self.rotation(angle * (1 - t)))
+            Animation.easeLin, time, lambda t: self.rotation(angle * (1 - t)))
         steps = round(steps) - 1
         if steps > 0:
             self.streamplayer.queue_audio(self.rewind, round(steps))
@@ -139,8 +142,11 @@ class RotaryDial:
         angle = (count + 2) * (360/13)
         angle -= 5  # tweak angle to fit assets better
 
+        # samplelen = len(self.rewind) / samplerate
+        samplelen = 0.1
+        time = 0.3 + count * samplelen
         rewindanim = Animation(
-            Animation.easeLin, 0.3 + count * 0.1, lambda t: self.rotation(-angle * (1 - t)))
+            Animation.easeLin, time, lambda t: self.rotation(-angle * (1 - t)))
         rewindanim.on_end = lambda: self._rewinding_end(n)
 
         if self.anim:
@@ -164,8 +170,11 @@ class RotaryDial:
         angle -= 5  # tweak angle to fit assets better
 
         # Setup animation and effects
-        self.streamplayer.queue_audio(self.wind, count+2)
-        self.anim = Animation(Animation.easeLin, 0.3 + count*0.1,
+        self.streamplayer.queue_audio(self.wind, count+1)
+        # samplelen = len(self.wind) / samplerate
+        samplelen = 0.05
+        time = 0.2 + count * samplelen
+        self.anim = Animation(Animation.easeLin, time,
                               lambda t: self.rotation(-angle * t))
         self.anim.on_end = lambda: self._winding_end()
 
