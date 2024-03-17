@@ -273,6 +273,28 @@ def loop_emulation(driver):
         driver.put_event(Event.DIAL, [key])
         driver.set_state(State.WAIT)
 
+    def toggle_hook_state():
+        hookbutton.highlight = not hookbutton.highlight
+        keypad.disabled = not hookbutton.highlight
+        if hookbutton.highlight:
+            # going off-hook
+            phone_audio.stop_audio()
+            number.clear()
+            driver.set_line_state(LineState.OFF_HOOK)
+            if driver.get_state() == State.RING:
+                dtmfplayer.beep('A')  # just some sound
+                diallabel.settext(sysfont_large, 'CALL')
+            else:
+                diallabel.settext(sysfont_large, '-')
+            driver.set_state(State.WAIT)
+            ringbutton.highlight = False
+            ringing_tasks.clear()
+        else:
+            # going on hook
+            driver.set_line_state(LineState.ON_HOOK)
+            driver.set_state(State.IDLE)
+            diallabel.settext(sysfont_large, 'READY')
+
     try:
         while loop_emulation.running:
             # pygame.QUIT event means the user clicked X to close your window
@@ -283,17 +305,21 @@ def loop_emulation(driver):
                 else:
                     (match, key) = check_key_event(event)
                     if match:
-                        if True:
+                        if False:
                             if event.type == pygame.KEYDOWN:
-                                rotarydial.dial_wind(key)
-                                if driver.get_state() == State.WAIT:
-                                    driver.set_state(State.DIAL)
-                                    driver.put_event(Event.DIAL_BEGIN)
+                                if type(key) is int:
+                                    rotarydial.dial_wind(key)
+                                    if driver.get_state() == State.WAIT:
+                                        driver.set_state(State.DIAL)
+                                        driver.put_event(Event.DIAL_BEGIN)
                             elif event.type == pygame.KEYUP:
                                 rotarydial.dial_rewind(key)
-                        else:
+                        elif driver.get_state() == State.WAIT:
                             if event.type == pygame.KEYDOWN:
                                 on_keypad_clicked(keypad.button(str(key)))
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        toggle_hook_state()
 
             AbstractButton.mouse = pygame.mouse.get_pressed()
             AbstractButton.position = pygame.mouse.get_pos()
@@ -338,26 +364,7 @@ def loop_emulation(driver):
                     driver.set_state(State.WAIT)
 
             if hookbutton.clicked:
-                hookbutton.highlight = not hookbutton.highlight
-                keypad.disabled = not hookbutton.highlight
-                if hookbutton.highlight:
-                    # going off-hook
-                    phone_audio.stop_audio()
-                    number.clear()
-                    driver.set_line_state(LineState.OFF_HOOK)
-                    if driver.get_state() == State.RING:
-                        dtmfplayer.beep('A')  # just some sound
-                        diallabel.settext(sysfont_large, 'CALL')
-                    else:
-                        diallabel.settext(sysfont_large, '-')
-                    driver.set_state(State.WAIT)
-                    ringbutton.highlight = False
-                    ringing_tasks.clear()
-                else:
-                    # going on hook
-                    driver.set_line_state(LineState.ON_HOOK)
-                    driver.set_state(State.IDLE)
-                    diallabel.settext(sysfont_large, 'READY')
+                toggle_hook_state()
 
             if keypad.clicked:
                 on_keypad_clicked(keypad.clicked)
