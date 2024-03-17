@@ -636,7 +636,7 @@ void handle_state_dial(StateStage stage)
     }
 }
 
-void handle_state_dialerror(StateStage stage)
+void handle_state_dial_error(StateStage stage)
 {
     static Timer2 errorClearTimeout(false, 1000);
     static Timer2 blinkTimer(true, 200);
@@ -656,6 +656,9 @@ void handle_state_dialerror(StateStage stage)
             if (!strcmp(cmd, "TERMINAL")) {
                 setState(STATE_TERMINAL);
                 return;
+            } else if (!strcmp(cmd, "RESET")) {
+                // clear error
+                setState(STATE_WAIT);
             } else {
                 serial_print("INVALID");
             }
@@ -814,7 +817,7 @@ static struct {
     { handle_state_ring, "RING"},
     { handle_state_wait, "WAIT"},
     { handle_state_dial, "DIAL"},
-    { handle_state_dialerror, "DIAL_ERROR"},
+    { handle_state_dial_error, "DIAL_ERROR"},
     { handle_state_terminal, "TERMINAL"}
 };
 // clang-format on

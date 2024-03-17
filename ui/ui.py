@@ -251,7 +251,6 @@ def loop_emulation(driver):
         pygame.K_KP9: 9,
         pygame.K_KP_DIVIDE: '#',
         pygame.K_KP_MULTIPLY: '*'
-
     }
 
     def check_key_event(event):
@@ -321,9 +320,6 @@ def loop_emulation(driver):
                     if event.key == pygame.K_SPACE:
                         toggle_hook_state()
 
-            AbstractButton.mouse = pygame.mouse.get_pressed()
-            AbstractButton.position = pygame.mouse.get_pos()
-
             # Dequeue commands from the driver
             (cmd, _) = driver.receive_cmd()
             if cmd == Command.RING:
@@ -340,9 +336,13 @@ def loop_emulation(driver):
                 driver.set_state(State.IDLE)
                 phone_audio.stop_audio()
 
+            # Update UI elements
+            AbstractButton.mouse = pygame.mouse.get_pressed()
+            AbstractButton.position = pygame.mouse.get_pos()
             for elem in drawables:
                 elem.update(dt)
 
+            # Check UI states
             if rotarydial.clicked:
                 b = rotarydial.clicked
                 if b.dragstart:
@@ -369,7 +369,7 @@ def loop_emulation(driver):
             if keypad.clicked:
                 on_keypad_clicked(keypad.clicked)
 
-            # Update tasks and remove them from list if they are done
+            # Update tasks and remove them from the list when they are done
             tasks[:] = [
                 elem for elem in tasks if not elem.update(dt)]
             ringing_tasks[:] = [

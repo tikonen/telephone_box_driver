@@ -57,7 +57,7 @@ class BasicPhone():
             if state == State.DIAL_ERROR:
                 self.dial_error()
                 break
-            elif self.driver.get_line_state() == LineState.ON_HOOK or self.driver.get_state() == State.IDLE:
+            elif self.driver.get_line_state() == LineState.ON_HOOK or state == State.IDLE:
                 # User hang up
                 break
             elif time.time() > timeout:

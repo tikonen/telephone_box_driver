@@ -2,8 +2,8 @@ import os
 import pygame
 import soundfile as sf
 
-from .widgets import Animation, Timer, Drawable, AbstractButton
-from .util import Box, StreamAudioPlayer
+from .widgets import Animation, Drawable, AbstractButton
+from .util import Box, StreamAudioPlayer, Timer
 
 ASSET_DIR = 'assets'
 DP_BASE = 'dialphone_base.png'

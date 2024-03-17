@@ -1,6 +1,8 @@
 import math
 import pygame
 
+from .util import Timer
+
 
 class Animation:
     def __init__(self, easing, t, onupdate, onend=None):
@@ -83,8 +85,6 @@ class AbstractButton:
             return
         (l, _, _) = AbstractButton.mouse
         hover = self.hittest(AbstractButton.position)
-        # (l, _, _) = pygame.mouse.get_pressed()
-        # hover = self.hittest(pygame.mouse.get_pos())
         if hover and not self.hover and not l:
             self.hover = hover
         elif not hover:
@@ -156,7 +156,6 @@ class Label(Button):
         super().__init__(*args, **kwargs)
         self.clickable = False
         self.pressed = True
-        self.disabled = False
 
 
 class Blinker:
@@ -181,30 +180,3 @@ class Blinker:
                 self.count -= 1
             return False
         return True
-
-
-class Timer:
-    def __init__(self, timeout, onexpire=None):
-        self.timer = 0
-        self.disabled = False
-        self.timeout = timeout
-        self.on_expire = onexpire
-
-    def reset(self):
-        self.timer = 0
-
-    def progress(self):
-        return self.timer / self.timeout
-
-    def update(self, dt):
-        if self.disabled:
-            return True
-
-        self.timer += dt
-        if self.timer >= self.timeout:
-            self.timer = self.timeout
-            self.disabled = True
-            if self.on_expire:
-                self.on_expire()
-            return True
-        return False

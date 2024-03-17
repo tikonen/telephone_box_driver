@@ -8,6 +8,33 @@ class Box:  # Helper class
     __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
 
 
+class Timer:
+    def __init__(self, timeout, onexpire=None):
+        self.timer = 0
+        self.disabled = False
+        self.timeout = timeout
+        self.on_expire = onexpire
+
+    def reset(self):
+        self.timer = 0
+
+    def progress(self):
+        return self.timer / self.timeout
+
+    def update(self, dt):
+        if self.disabled:
+            return True
+
+        self.timer += dt
+        if self.timer >= self.timeout:
+            self.timer = self.timeout
+            self.disabled = True
+            if self.on_expire:
+                self.on_expire()
+            return True
+        return False
+
+
 class StreamAudioPlayer():
     def __init__(self, samplerate, channels, dtype='float32'):
         self.samplerate = samplerate

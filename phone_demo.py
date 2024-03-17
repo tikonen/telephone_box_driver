@@ -10,7 +10,7 @@ import soundfile as sf
 from telephonebox import Event, State, Command
 from basicphone import BasicPhone
 from dtmfphone import DTMFPhone
-from phone_util import load_model_config, adjust_volume
+from phone_util import adjust_volume, create_device_driver
 import phone_audio
 
 verbose_debug = False
@@ -201,32 +201,7 @@ def main():
         '-m', '--model', metavar='FILE', help='Phone model file')
     args = parser.parse_args()
 
-    port = None
     verbose_level = args.verbose
-
-    config = load_model_config(args.model)
-    if verbose_level:
-        print(config)
-
-    if args.port:
-        port = args.port
-    else:
-        print("Finding PhoneBox")
-        if verbose_level:
-            print("Serial ports:")
-        import serial.tools.list_ports
-        ports = list(serial.tools.list_ports.comports())
-        for p in ports:
-            if verbose_level:
-                print("\t", p)
-            if "Arduino" in p.description or "CH340" in p.description:
-                port = p.device
-
-    if port:
-        print("Device port: ", port)
-    else:
-        print("ERROR: No Device port found.")
-        exit(1)
 
     # print audio devices
     device = sd.query_devices(kind='output')
@@ -240,13 +215,7 @@ def main():
     else:
         print("WARNING: No input audio device")
 
-    print("Connecting...")
-    from telephonebox import CommandConnection, Driver
-    cc = CommandConnection(verbose_level)
-    cc.open_port(port, timeoutms=500)
-    driver = Driver(cc, verbose=verbose_level)
-    driver.connect()
-    print("Device initialized.")
+    driver = create_device_driver(verbose_level, args.port, args.model)
 
     if args.demo == 'call':
         print("Demo#1 Call handling")
@@ -262,9 +231,6 @@ def main():
         demo = DTMFPhone(driver, verbose_level)
     else:
         raise Exception("Unknown demo", args.demo)
-
-    # Load model definitions and configure
-    demo.config(config)
 
     try:
         while True:
