@@ -75,7 +75,7 @@ void _putchar(char character) { serial_write_char(character); }
 #define test_button() (digitalRead(TEST_BUTTON_PIN) == LOW)
 
 static const char* stateToStr();
-bool setState(State newState);
+void setState(State newState);
 
 bool setLineState(LineState newState)
 {
@@ -786,7 +786,7 @@ typedef void (*StateHandler)(StateStage);
 static State sState = STATE_INITIAL;
 static State sLastState = STATE_NONE;
 
-bool setState(State newState)
+void setState(State newState)
 {
     sLastState = sState;
     sState = newState;
