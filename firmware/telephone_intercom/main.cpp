@@ -68,7 +68,7 @@ static struct Configuration {
 void _putchar(char character) { serial_write_char(character); }
 
 #define serial_printfln(format, ...) printf(format SER_EOL, ##__VA_ARGS__)
-#define serial_print(str) serial_write_line(str)
+#define serial_println(str) serial_write_line(str)
 
 #define test_button() (digitalRead(SW1_PIN) == LOW || digitalRead(SW2_PIN) == LOW)
 
@@ -135,7 +135,7 @@ void setup()
 #if 0
     if (!runSelfTest()) {
         // Indicate problem by blinking leds
-        serial_print("WARN:-1");
+        serial_println("WARN:-1");
         for (int i = 0; i < 10; i++) {
             digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
             delay(200);
@@ -212,20 +212,20 @@ const char* serial_read_cmd()
     if (cmd) {
         // serial_printfln("LINE:%s", cmd);
         if (!strlen(cmd)) {
-            serial_print("READY");
+            serial_println("READY");
             return NULL;
         } else if (!strcmp(cmd, "STATE")) {
-            serial_print("OK");
+            serial_println("OK");
             serial_printfln("STATE %s", stateToStr());
-            serial_print("READY");
+            serial_println("READY");
             return NULL;
         } else if (!strcmp(cmd, "LINE")) {
-            serial_print("OK");
+            serial_println("OK");
             for (int line = 0; line < 2; line++) {
                 serial_printfln("LINE%d %s", (line + 1), lineStateToStr(sLineStates[line]));
             }
 
-            serial_print("READY");
+            serial_println("READY");
             return NULL;
         }
     }
@@ -336,7 +336,7 @@ void handle_state_idle(StateStage stage)
         }
         wait_ms(RELAY_DELAY_MS);  // let relays release
         serial_clear();
-        serial_print("READY");
+        serial_println("READY");
         waitTimer.reset(ts);
     }
 
@@ -369,7 +369,7 @@ void handle_state_idle(StateStage stage)
         // Read commands and execute
         if (const char* cmd = serial_read_cmd()) {
             if (!strcmp(cmd, "RING")) {
-                serial_print("OK");
+                serial_println("OK");
                 setState(STATE_RING);
                 return;
             } else if (!strcmp(cmd, "TERMINAL")) {
@@ -378,15 +378,15 @@ void handle_state_idle(StateStage stage)
                 /*
                 } else if (!strncmp(cmd, "CONF", 4)) {
                     if (parse_and_apply_config(cmd + 4)) {
-                        serial_print("OK");
+                        serial_println("OK");
                     } else {
-                        serial_print("INVALID");
+                        serial_println("INVALID");
                     }
                     */
             } else {
-                serial_print("INVALID");
+                serial_println("INVALID");
             }
-            serial_print("READY");
+            serial_println("READY");
         }
     }
 
@@ -396,13 +396,12 @@ void handle_state_idle(StateStage stage)
 
 void handle_state_ring(StateStage stage)
 {
-#if 0
     static bool ringState = false;
 
     static Timer2 ringingTimeout(false, 30000);
-    static Timer2 ringTime(false, config.ringCadenceOn);
-    static Timer2 ringPauseTime(false, config.ringCadenceOff);
-    static Timer2 ringHzTimer(true, 1000 / config.ringFreq / 2);
+    static Timer2 ringTime(false, RING_CADENCE_ON_MS);
+    static Timer2 ringPauseTime(false, RING_CADENCE_OFF_MS);
+    static Timer2 ringHzTimer(true, 1000 / RING_FREQ_HZ / 2);
     static Timer2 ringTripStabilizationTimer(false, RING_TRIP_STABILIZATION_DELAY_MS);
 
     uint32_t ts = millis();
@@ -420,15 +419,15 @@ void handle_state_ring(StateStage stage)
 
         ts = millis();
         ringingTimeout.reset(ts);
-        ringTime.set(config.ringCadenceOn);
-        ringPauseTime.set(config.ringCadenceOff);
-        ringHzTimer.set(1000 / config.ringFreq / 2);
+        ringTime.set(RING_CADENCE_ON_MS);
+        ringPauseTime.set(RING_CADENCE_OFF_MS);
+        ringHzTimer.set(1000 / RING_FREQ_HZ / 2);
         ringTripStabilizationTimer.reset(ts);
 
-        serial_print("READY");
+        serial_println("READY");
 
         ringState = true;
-        serial_print("RING");
+        serial_println("RING");
         return;
     }
 
@@ -449,8 +448,8 @@ void handle_state_ring(StateStage stage)
 
             if (ring_trip) {
                 // phone has been picked up
-                serial_print("RING_TRIP");
-                serial_print("LINE OFF_HOOK");
+                serial_println("RING_TRIP");
+                serial_println("LINE OFF_HOOK");
                 setState(STATE_WAIT);
                 return;
             }
@@ -459,19 +458,19 @@ void handle_state_ring(StateStage stage)
         // Read commands and execute
         if (const char* cmd = serial_read_cmd()) {
             if (!strcmp(cmd, "STOP")) {
-                serial_print("OK");
+                serial_println("OK");
                 setState(STATE_IDLE);
                 return;
             } else if (!strcmp(cmd, "RING")) {
-                serial_print("OK");
+                serial_println("OK");
             } else {
-                serial_print("INVALID");
+                serial_println("INVALID");
             }
-            serial_print("READY");
+            serial_println("READY");
         }
 
         if (ringingTimeout.update(ts)) {
-            serial_print("RING_TIMEOUT");
+            serial_println("RING_TIMEOUT");
             setState(STATE_IDLE);
             return;
         }
@@ -484,7 +483,7 @@ void handle_state_ring(StateStage stage)
                 digitalWrite(PPB_PIN, LOW);
                 digitalWrite(LED_RED_PIN, HIGH);
                 ringState = 0;
-                serial_print("RING_PAUSE");
+                serial_println("RING_PAUSE");
                 ringPauseTime.reset(ts);
             } else {
                 // ring cycle active
@@ -496,7 +495,7 @@ void handle_state_ring(StateStage stage)
             }
         } else if (ringPauseTime.update(ts)) {
             ringState = true;
-            serial_print("RING");
+            serial_println("RING");
             ringTime.reset(ts);
             ringHzTimer.reset();
         }
@@ -510,20 +509,52 @@ void handle_state_ring(StateStage stage)
         digitalWrite(POWER_DIS_PIN, HIGH);
         return;
     }
-#endif
 }
 
 // Called to read and discard commands when they can not be executed
 void discardCommands()
 {
     while (serial_read_cmd()) {
-        serial_print("INVALID");
-        serial_print("READY");
+        serial_println("INVALID");
+        serial_println("READY");
     }
 }
 
 void handle_state_wait(StateStage stage)
 {
+    static bool cadence = true;
+    static Timer2 cadenceTimeout(true, 1000);
+    uint32_t ts = millis();
+
+    if (stage == ENTER) {
+        cadenceTimeout.reset(ts);
+        pwm_dac_enable();
+    }
+
+    if (stage == EXECUTE) {
+        if (cadenceTimeout.update(ts)) {
+            cadence = !cadence;
+            if (cadence)
+                pwm_dac_enable();
+            else
+                pwm_dac_disable();
+        }
+
+        if (const char* cmd = serial_read_cmd()) {
+            if (!strcmp(cmd, "TERMINAL")) {
+                setState(STATE_TERMINAL);
+                return;
+            } else {
+                serial_println("INVALID");
+            }
+            serial_println("READY");
+        }
+    }
+
+    if (stage == LEAVE) {
+        pwm_dac_disable();
+    }
+
 #if 0
     if (stage == ENTER) {
         digitalWrite(PPA_PIN, HIGH);  // required for ring-trip detection
@@ -539,16 +570,16 @@ void handle_state_wait(StateStage stage)
                 setState(STATE_TERMINAL);
                 return;
             } else {
-                serial_print("INVALID");
+                serial_println("INVALID");
             }
-            serial_print("READY");
+            serial_println("READY");
         }
 
         updateLineState();
 
         // Wait for the number dial in
         if (sLineState == LINE_STATE_ON_HOOK) {
-            serial_print("LINE ON_HOOK");
+            serial_println("LINE ON_HOOK");
             setState(STATE_IDLE);
             return;
         } else if (sLineState == LINE_STATE_SHORT) {
@@ -580,7 +611,6 @@ void handle_state_call(StateStage stage) {}
 
 void handle_state_terminal(StateStage stage)
 {
-#if 0
     static Timer2 logTimer(true, 1000);
     static bool linelog = false;
 
@@ -588,67 +618,77 @@ void handle_state_terminal(StateStage stage)
 
     if (stage == ENTER) {
         // digitalWrite(LED_GREEN, HIGH);
-        digitalWrite(LED_YELLOW_PIN, HIGH);
         digitalWrite(LED_RED_PIN, HIGH);
-        serial_print("Testing terminal");
-        serial_print(">");
+        serial_println("Testing terminal");
+        serial_println(">");
         linelog = false;
         logTimer.reset(ts);
     }
     if (stage == EXECUTE) {
         if (linelog) {
             // Log line state every time it changes
-            if (updateLineState()) {
-                serial_printfln("LINESTATE: %s (%.2fV)", lineStateToStr(sLineState), sLineSenseVoltage);
+            if (updateLineStates()) {
+                for (int line; line < 2; line++) {
+                    serial_printfln("LINESTATE%d: %s (%.2fV)", (line + 1), lineStateToStr(sLineStates[line]), sLineSenseVoltages[line]);
+                }
             }
             // Report linesense every second
             if (logTimer.update(ts)) {
-                int a = analogRead(LINESENSE_PIN);
-                float v = (5.0f * a) / ((1 << 10) - 1);
-                serial_printfln("LINESENSE: %u (%.2fV)", a, v);
+                for (int line; line < 2; line++) {
+                    int a = analogRead(sLineStates[line]);
+                    float v = (5.0f * a) / ((1 << 10) - 1);
+                    serial_printfln("LINESENSE%d: %u (%.2fV)", (line + 1), a, v);
+                }
             }
         }
+
+#define PIN_RO 0
+#define PIN_RW 1
 
         const struct {
             const char* name;
             uint8_t pin;
             uint8_t flags;
-        } pinTable[] = {                                                                                     //
-            {"BUTTON", TEST_BUTTON_PIN, 0},  //
-            {"SW1", SW1_PIN, 0}, //
-            {"SW2", SW2_PIN, 0}, //
-            {"RELAY1_EN", RELAY1_EN_PIN, 1}, //
-            {"RELAY2_EN", RELAY2_EN_PIN, 1}, //
-            {"POWER_DIS", POWER_DIS_PIN, 1},  //
-            {"LED_RED", LED_RED_PIN, 1} };
+        } pinTable[] = {                           //
+            {"SW1", SW1_PIN, PIN_RO},              //
+            {"SW2", SW2_PIN, PIN_RO},              //
+            {"RELAY1_EN", RELAY1_EN_PIN, PIN_RW},  //
+            {"RELAY2_EN", RELAY2_EN_PIN, PIN_RW},  //
+            {"POWER_DIS", POWER_DIS_PIN, PIN_RW},  //
+            {"LED_RED", LED_RED_PIN, PIN_RW}};
         const int pinCount = sizeof(pinTable) / sizeof(pinTable[0]);
 
         const char* cmd = serial_read_line();
         if (!cmd) return;
 
         if (!strcmp(cmd, "HELP")) {
-            serial_print("LINE");
-            serial_print("LINELOG [1|0]");
-            serial_print("RING");
+            serial_println("LINE");
+            serial_println("LINELOG");
+            serial_println("RING");
+            serial_println("TONE");
             for (int i = 0; i < pinCount; i++) {
-                char buffer[32];
-                if (pinTable[i].flags) {
-                    snprintf(buffer, 32, "%s [1|0]", pinTable[i].name);
+                if (pinTable[i].flags & PIN_RW) {
+                    serial_printfln("%s [1|0]", pinTable[i].name);
                 } else {
-                    strcpy(buffer, pinTable[i].name);
+                    serial_println(pinTable[i].name);
                 }
-                serial_printfln("%s", buffer);
             }
-            serial_print("EXIT");
-            serial_print("HELP");
+            serial_println("EXIT");
+            serial_println("HELP");
 
+        } else if (!strcmp(cmd, "TONE")) {
+            if (pwm_dac_enabled()) {
+                pwm_dac_disable();
+            } else {
+                pwm_dac_enable();
+            }
         } else if (!strcmp(cmd, "LINE")) {
             // Report line state
-            updateLineState();
-            serial_printfln("LINESTATE: %s", lineStateToStr(sLineState));
-            int a = analogRead(LINESENSE_PIN);
-            float v = (5.0f * a) / ((1 << 10) - 1);
-            serial_printfln("LINESENSE: %u (%.2fV)", a, v);
+            updateLineStates();
+            for (int line; line < 2; line++) {
+                serial_printfln("LINESTATE%d: %s", (line + 1), lineStateToStr(sLineStates[line]));
+                serial_printfln("LINESENSE%d: %.2fV", (line + 1), sLineSenseVoltages[line]);
+            }
             serial_printfln("TRIPSENSE: %u", digitalRead(TRIPSENSE_PIN));
         } else if (!strncmp(cmd, "LINELOG ", 8)) {
             // Toggle line state logging
@@ -664,7 +704,7 @@ void handle_state_terminal(StateStage stage)
             for (int i = 0; i < pinCount; i++) {
                 if (!strncmp(cmd, pinTable[i].name, strlen(pinTable[i].name))) {
                     cmd += strlen(pinTable[i].name);
-                    if (*cmd && pinTable[i].flags) {
+                    if (*cmd && (pinTable[i].flags & PIN_RW)) {
                         digitalWrite(pinTable[i].pin, atoi(cmd));
                     }
                     serial_printfln("%s: %u", pinTable[i].name, digitalRead(pinTable[i].pin));
@@ -672,16 +712,17 @@ void handle_state_terminal(StateStage stage)
                 }
             }
         }
-        serial_print(">");
+        serial_println(">");
     }
     if (stage == LEAVE) {
-        digitalWrite(LED_YELLOW_PIN, LOW);
         digitalWrite(LED_RED_PIN, LOW);
-        digitalWrite(RELAY_EN_PIN, LOW);
+        digitalWrite(RELAY1_EN_PIN, LOW);
+        digitalWrite(RELAY2_EN_PIN, LOW);
         digitalWrite(POWER_DIS_PIN, HIGH);
-        digitalWrite(RELAY_EN_PIN, LOW);
     }
-#endif
+
+#undef PIN_RO
+#undef PIN_RW
 }
 
 

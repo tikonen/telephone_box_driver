@@ -8,11 +8,13 @@
 #error "AtMega328p based Arduino board required"
 #endif
 
-#define SAMPLE_N 16  // Use power of two for performance!
+#define SAMPLE_N 24  // Use power of two for performance!
 uint16_t samples[SAMPLE_N];
 uint8_t sample_idx = 0;
 
 #define is_pow2(n) (!(n & (n - 1)))
+
+bool pwm_dac_enabled() { return TCCR1A != 0; }
 
 void pwm_dac_disable()
 {
@@ -25,6 +27,7 @@ void pwm_dac_disable()
 void pwm_dac_enable()
 {
     // Enable pin output and interrupt
+    sample_idx = 0;
     TCCR1A = _BV(COM1A1);
     TIMSK1 = _BV(ICIE1);
 }
@@ -45,7 +48,7 @@ void pwm_dac_init()
 
     // Precompute samples (PWM duty cycles)
     for (int i = 0; i < SAMPLE_N; i++) {
-        samples[i] = round(counter_top * sin(float(M_PI) * i / SAMPLE_N));
+        samples[i] = round(counter_top * (sin(float(2 * M_PI) * i / (SAMPLE_N - 1)) + 1) / 2);
     }
 
     // PWM, Phase and Frequency Correct. ICR1 TOP
@@ -75,6 +78,8 @@ void pwm_dac_init()
 ISR(TIMER1_CAPT_vect)
 {
     // Adjust PWM duty cycle
-    uint16_t sample = samples[sample_idx++ % SAMPLE_N];
+    // uint16_t sample = samples[sample_idx++ % SAMPLE_N];
+    uint16_t sample = samples[sample_idx++];
+    if (sample_idx >= SAMPLE_N) sample_idx = 0;
     OCR1A = sample;
 }
