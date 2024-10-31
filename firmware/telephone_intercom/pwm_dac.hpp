@@ -8,11 +8,11 @@
 #error "AtMega328p based Arduino board required"
 #endif
 
-#define SAMPLE_N 24  // Use power of two for performance!
-uint16_t samples[SAMPLE_N];
-uint8_t sample_idx = 0;
+#define SAMPLE_N 24  // Use power of two for best ISR performance!
+static uint16_t samples[SAMPLE_N];
+static uint8_t sample_idx = 0;
 
-#define is_pow2(n) (!(n & (n - 1)))
+#define IS_POW2(n) (!(n & (n - 1)))
 
 bool pwm_dac_enabled() { return TCCR1A != 0; }
 
@@ -78,8 +78,12 @@ void pwm_dac_init()
 ISR(TIMER1_CAPT_vect)
 {
     // Adjust PWM duty cycle
-    // uint16_t sample = samples[sample_idx++ % SAMPLE_N];
+#if IS_POW2(SAMPLE_N)
+    uint16_t sample = samples[sample_idx++ % SAMPLE_N];
+#else
     uint16_t sample = samples[sample_idx++];
     if (sample_idx >= SAMPLE_N) sample_idx = 0;
+#endif
+
     OCR1A = sample;
 }

@@ -30,10 +30,12 @@ enum State {
     STATE_TERMINAL  // Debug and testing mode
 };
 
-int relayPins[2] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
-int lineSensePins[2] = {LINESENSE1_PIN, LINESENSE2_PIN};
+#define LINE_COUNT 2
 
-static LineState sLineStates[2] = {LINE_STATE_UNKNOWN, LINE_STATE_UNKNOWN};
+int relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
+int lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
+
+static LineState sLineStates[LINE_COUNT] = {LINE_STATE_UNKNOWN, LINE_STATE_UNKNOWN};
 
 static const char* lineStateToStr(LineState state)
 {
@@ -54,17 +56,6 @@ enum StateStage { ENTER, EXECUTE, LEAVE };
 #define RING_CADENCE_ON_MS 2000
 #define RING_CADENCE_OFF_MS 2000
 
-#if 0
-static struct Configuration {
-    int dialMode = DIAL_MODE_SINGLE;
-    float onHookThreshold = LSENSE_ONHOOK_V;
-    float offHookThreshold = LSENSE_OFFHOOK_V;
-    int ringFreq = RING_FREQ_HZ;
-    int ringCadenceOn = RING_CADENCE_ON_MS;
-    int ringCadenceOff = RING_CADENCE_OFF_MS;
-} config;
-#endif
-
 void _putchar(char character) { serial_write_char(character); }
 
 #define serial_printfln(format, ...) printf(format SER_EOL, ##__VA_ARGS__)
@@ -82,6 +73,10 @@ bool setLineState(int line, LineState newState)
     sLineStates[line] = newState;
     return oldState != sLineStates[line];
 }
+
+#define tone_is_enabled() pwm_dac_enabled()
+#define tone_enable() pwm_dac_enable()
+#define tone_disable() pwm_dac_disable()
 
 // static bool runSelfTest();
 
@@ -103,7 +98,7 @@ void setup()
     digitalWrite(PPA_PIN, LOW);
     digitalWrite(PPB_PIN, LOW);
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < LINE_COUNT; i++) {
         pinMode(relayPins[i], OUTPUT);
         digitalWrite(relayPins[i], LOW);
     }
@@ -114,17 +109,17 @@ void setup()
     pinMode(TONE_DAC_PIN, OUTPUT);
     digitalWrite(TONE_DAC_PIN, HIGH);
 
-    for (int i = 0; i < 2; i++) digitalWrite(relayPins[i], LOW);
+    for (int i = 0; i < LINE_COUNT; i++) digitalWrite(relayPins[i], LOW);
 
     pinMode(TRIPSENSE_PIN, INPUT);
 
-    analogReference(DEFAULT);    // 5V
+    analogReference(DEFAULT);             // 5V
 
-    for (int i = 0; i < 2; i++)  // First analog read must be discarded
+    for (int i = 0; i < LINE_COUNT; i++)  // First analog read must be discarded
         analogRead(lineSensePins[i]);
 
     // Test relays
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < LINE_COUNT; i++) {
         digitalWrite(relayPins[i], HIGH);
         delay(500);
         digitalWrite(relayPins[i], LOW);
@@ -149,7 +144,7 @@ void setup()
 
 bool isRingTrip() { return digitalRead(TRIPSENSE_PIN) == HIGH; }
 
-static float sLineSenseVoltages[2];  // for debugging
+static float sLineSenseVoltages[LINE_COUNT];  // for debugging
 LineState readLineState(int line)
 {
     const float vref = 5.0f;
@@ -165,11 +160,20 @@ LineState readLineState(int line)
 bool updateLineStates()
 {
     bool changed = false;
-    for (int line = 0; line < 2; line++) {
+    for (int line = 0; line < LINE_COUNT; line++) {
         LineState state = readLineState(line);
         changed = setLineState(line, state) || changed;
     }
     return changed;
+}
+
+int compareLineStates(LineState state)
+{
+    int c = 0;
+    for (int line = 0; line < LINE_COUNT; line++) {
+        if (sLineStates[line] == state) c++;
+    }
+    return c;
 }
 
 #if 0
@@ -221,7 +225,7 @@ const char* serial_read_cmd()
             return NULL;
         } else if (!strcmp(cmd, "LINE")) {
             serial_println("OK");
-            for (int line = 0; line < 2; line++) {
+            for (int line = 0; line < LINE_COUNT; line++) {
                 serial_printfln("LINE%d %s", (line + 1), lineStateToStr(sLineStates[line]));
             }
 
@@ -240,98 +244,13 @@ void handle_state_initial(StateStage stage)
     }
 }
 
-#if 0
-
-// parses string like KEY:val
-bool parse_key(const char* key, const char** conf)
-{
-    int len = strlen(key);
-    if (!strncmp(key, *conf, len) && (*conf)[len] == ':') {
-        *conf += len + 1;
-        return true;
-    }
-
-    return false;
-}
-
-// Configuration keys
-//
-//  DM:<n>         int. 0 disable, 1: single digit dial (default)
-//  TON:<voltage>  float. On-hook threshold voltage level
-//  TOFF:<voltage> float. Off-hook threshold voltage level.
-//  HZ:<freq>      int. Ringing frequency
-//  RCON:<ms>      int. Ring cadence on
-//  RCOFF:<ms>     int. Ring cadence off
-//
-bool parse_and_apply_config(const char* conf)
-{
-    if (*conf == '\0') {
-        // print current configuration
-        serial_printfln("CONF DM:%d", config.dialMode);
-        serial_printfln("CONF TON:%.2fV", config.onHookThreshold);
-        serial_printfln("CONF TOFF:%.2fV", config.offHookThreshold);
-        serial_printfln("CONF HZ:%d", config.ringFreq);
-        serial_printfln("CONF RCON:%d", config.ringCadenceOn);
-        serial_printfln("CONF RCOFF:%d", config.ringCadenceOff);
-    } else {
-        while (*conf == ' ') {
-            // serial_printfln("\"\r%s\"", conf);
-            conf++;
-            char* endptr = NULL;
-            if (parse_key("DM", &conf)) {  // Dial mode configuration
-                int val = strtol(conf, &endptr, 10);
-                if (endptr != conf) {
-                    config.dialMode = val;
-                } else
-                    return false;
-            } else if (parse_key("TON", &conf)) {  // On-hook threshold level
-                float val = strtod(conf, &endptr);
-                if (endptr != conf) {
-                    config.onHookThreshold = val;
-                } else
-                    return false;
-            } else if (parse_key("TOFF", &conf)) {  // Off-hook threshold level
-                float val = strtod(conf, &endptr);
-                if (endptr != conf) {
-                    config.offHookThreshold = val;
-                } else
-                    return false;
-            } else if (parse_key("HZ", &conf)) {  // Ringing frequency
-                int val = strtol(conf, &endptr, 10);
-                if (endptr != conf) {
-                    config.ringFreq = val;
-                } else
-                    return false;
-            } else if (parse_key("RCON", &conf)) {  // Ring cadence off time
-                float val = strtod(conf, &endptr);
-                if (endptr != conf) {
-                    config.ringCadenceOn = val;
-                } else
-                    return false;
-            } else if (parse_key("RCOFF", &conf)) {  // Ring cadence off time
-                float val = strtod(conf, &endptr);
-                if (endptr != conf) {
-                    config.ringCadenceOff = val;
-                } else
-                    return false;
-            } else {
-                return false;
-            }
-            conf = endptr;
-        }
-        if (*conf != '\0') return false;
-    }
-    return true;
-}
-#endif
-
 void handle_state_idle(StateStage stage)
 {
     static Timer2 waitTimer(false, 100);
     uint32_t ts = millis();
 
     if (stage == ENTER) {
-        for (int line = 0; line < 2; line++) {
+        for (int line = 0; line < LINE_COUNT; line++) {
             digitalWrite(relayPins[line], LOW);
         }
         wait_ms(RELAY_DELAY_MS);  // let relays release
@@ -343,10 +262,10 @@ void handle_state_idle(StateStage stage)
     if (stage == EXECUTE) {
         bool changed = updateLineStates();
 
-        if (!changed && (sLineStates[0] == LINE_STATE_OFF_HOOK || sLineStates[1] == LINE_STATE_OFF_HOOK)) {
-            // Go the next state when line has been stable for a moment
+        if (!changed && compareLineStates(LINE_STATE_OFF_HOOK)) {
+            // Go the next state when line has been stable for a moment and at least one line is off-hook
             if (waitTimer.update(ts)) {
-                for (int line = 0; line < 2; line++) {
+                for (int line = 0; line < LINE_COUNT; line++) {
                     serial_printfln("LINE %s", lineStateToStr(sLineStates[line]));
                 }
                 setState(STATE_WAIT);
@@ -407,21 +326,43 @@ void handle_state_ring(StateStage stage)
     uint32_t ts = millis();
 
     if (stage == ENTER) {
-        if (isRingTrip()) {
+        tone_disable();
+
+        // Ensure that there is at least one line to ring
+        updateLineStates();
+        if (compareLineStates(LINE_STATE_OFF_HOOK) == LINE_COUNT) {
+            setState(STATE_CALL);
+            return;
+        }
+        if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
             setState(STATE_IDLE);
             return;
         }
+
+        digitalWrite(PPB_PIN, LOW);
+        digitalWrite(PPA_PIN, HIGH);
+
+        // Enable ring circuit for on-hook lines
+        for (int line = 0; line < LINE_COUNT; line++) {
+            if (sLineStates[line] == LINE_STATE_ON_HOOK) {
+                digitalWrite(relayPins[line], HIGH);
+            }
+        }
+
+        wait_ms(RELAY_DELAY_MS);  // let relays to latch
+
         digitalWrite(LED_RED_PIN, HIGH);
-        digitalWrite(PPB_PIN, HIGH);
+
         digitalWrite(PPA_PIN, LOW);
+        digitalWrite(PPB_PIN, HIGH);
         digitalWrite(POWER_DIS_PIN, LOW);  // enable power for ring ac
         delay(500);
 
         ts = millis();
         ringingTimeout.reset(ts);
-        ringTime.set(RING_CADENCE_ON_MS);
-        ringPauseTime.set(RING_CADENCE_OFF_MS);
-        ringHzTimer.set(1000 / RING_FREQ_HZ / 2);
+        ringTime.reset(ts);
+        ringPauseTime.reset(ts);
+        ringHzTimer.reset(ts);
         ringTripStabilizationTimer.reset(ts);
 
         serial_println("READY");
@@ -432,17 +373,6 @@ void handle_state_ring(StateStage stage)
     }
 
     if (stage == EXECUTE) {
-        // Check test button press
-        if (test_button()) {
-            delay(50);
-            // wait until user releases button
-            while (test_button())
-                ;
-            delay(10);  // let button stabilize
-            setState(STATE_IDLE);
-            return;
-        }
-
         if (ringTripStabilizationTimer.update(ts)) {
             bool ring_trip = isRingTrip();
 
@@ -450,9 +380,15 @@ void handle_state_ring(StateStage stage)
                 // phone has been picked up
                 serial_println("RING_TRIP");
                 serial_println("LINE OFF_HOOK");
-                setState(STATE_WAIT);
+                setState(STATE_CALL);
                 return;
             }
+        }
+
+        updateLineStates();
+        if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
+            setState(STATE_IDLE);
+            return;
         }
 
         // Read commands and execute
@@ -478,11 +414,12 @@ void handle_state_ring(StateStage stage)
         if (ringState) {
             // phone is ringing
             if (ringTime.update(ts)) {
+                tone_disable();
                 // ring cycle expired, go to wait time
                 digitalWrite(PPA_PIN, HIGH);
                 digitalWrite(PPB_PIN, LOW);
                 digitalWrite(LED_RED_PIN, HIGH);
-                ringState = 0;
+                ringState = false;
                 serial_println("RING_PAUSE");
                 ringPauseTime.reset(ts);
             } else {
@@ -494,6 +431,7 @@ void handle_state_ring(StateStage stage)
                 }
             }
         } else if (ringPauseTime.update(ts)) {
+            tone_enable();
             ringState = true;
             serial_println("RING");
             ringTime.reset(ts);
@@ -503,10 +441,14 @@ void handle_state_ring(StateStage stage)
     }
 
     if (stage == LEAVE) {
+        tone_disable();
         digitalWrite(LED_RED_PIN, LOW);
         digitalWrite(PPB_PIN, LOW);
         digitalWrite(PPA_PIN, LOW);
         digitalWrite(POWER_DIS_PIN, HIGH);
+        for (int line = 0; line < LINE_COUNT; line++) {
+            digitalWrite(relayPins[line], LOW);
+        }
         return;
     }
 }
@@ -522,24 +464,15 @@ void discardCommands()
 
 void handle_state_wait(StateStage stage)
 {
-    static bool cadence = true;
-    static Timer2 cadenceTimeout(true, 1000);
+    static Timer2 waitTimeout(true, 3000);
     uint32_t ts = millis();
 
     if (stage == ENTER) {
-        cadenceTimeout.reset(ts);
-        pwm_dac_enable();
+        waitTimeout.reset(ts);
+        tone_enable();
     }
 
     if (stage == EXECUTE) {
-        if (cadenceTimeout.update(ts)) {
-            cadence = !cadence;
-            if (cadence)
-                pwm_dac_enable();
-            else
-                pwm_dac_disable();
-        }
-
         if (const char* cmd = serial_read_cmd()) {
             if (!strcmp(cmd, "TERMINAL")) {
                 setState(STATE_TERMINAL);
@@ -548,66 +481,65 @@ void handle_state_wait(StateStage stage)
                 serial_println("INVALID");
             }
             serial_println("READY");
+        }
+
+        updateLineStates();
+
+        if (compareLineStates(LINE_STATE_OFF_HOOK) == LINE_COUNT) {
+            setState(STATE_CALL);
+        }
+
+        if (waitTimeout.update(ts)) {
+            // setState(STATE_RING);
         }
     }
 
     if (stage == LEAVE) {
-        pwm_dac_disable();
+        tone_disable();
     }
-
-#if 0
-    if (stage == ENTER) {
-        digitalWrite(PPA_PIN, HIGH);  // required for ring-trip detection
-        digitalWrite(PPB_PIN, LOW);
-        
-        digitalWrite(RELAY_EN_PIN, HIGH);
-        wait_ms(RELAY_DELAY_MS);  // let relay latch
-    }
-
-    if (stage == EXECUTE) {
-        if (const char* cmd = serial_read_cmd()) {
-            if (!strcmp(cmd, "TERMINAL")) {
-                setState(STATE_TERMINAL);
-                return;
-            } else {
-                serial_println("INVALID");
-            }
-            serial_println("READY");
-        }
-
-        updateLineState();
-
-        // Wait for the number dial in
-        if (sLineState == LINE_STATE_ON_HOOK) {
-            serial_println("LINE ON_HOOK");
-            setState(STATE_IDLE);
-            return;
-        } else if (sLineState == LINE_STATE_SHORT) {
-            // Rotary dial shorts the line when user starts winding the dial to the number
-
-            // Wait for a while to filter out sporadic shorts. These
-            // maybe triggered by users finger slipping of the rotary dial, DTMF and transistor
-            // phones current demand peaks etc.
-            Timer2 shortTimer(false, 150);
-            while (sLineState == LINE_STATE_SHORT) {
-                uint32_t ts = millis();
-                if (shortTimer.update(ts)) {
-                    // Line has been shorted for long enough. Dial begins
-                    switch (config.dialMode) {
-                        case DIAL_MODE_SINGLE: setState(STATE_DIAL); break;
-                        case DIAL_MODE_NONE:  // ignore
-                        default: break;
-                    }
-                    return;
-                }
-                updateLineState();
-            }
-        }
-    }
-#endif
 }
 
-void handle_state_call(StateStage stage) {}
+void handle_state_call(StateStage stage)
+{
+    static bool toneActive;
+    static Timer2 toneTimer(true, 500);
+
+    uint32_t ts = millis();
+
+    if (stage == ENTER) {
+        delay(200);  // wait for a while for things to stabilize
+        toneTimer.reset(ts);
+        toneActive = false;
+    }
+    if (stage == EXECUTE) {
+        if (updateLineStates()) {
+            if (compareLineStates(LINE_STATE_OFF_HOOK) == 1) {
+                // only one line active.
+                tone_enable();
+                toneActive = true;
+            } else if (compareLineStates(LINE_STATE_OFF_HOOK) == LINE_COUNT) {
+                // back to a normal call
+                tone_disable();
+                toneActive = false;
+            }
+            toneTimer.reset(ts);
+        }
+        // Go back to idle state when all the lines have hanged up and are on-hook
+        if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
+            setState(STATE_IDLE);
+        }
+        if (toneActive && toneTimer.update(ts)) {
+            if (toneTimer.flipflop()) {
+                tone_enable();
+            } else {
+                tone_disable();
+            }
+        }
+    }
+    if (stage == LEAVE) {
+        tone_disable();
+    }
+}
 
 void handle_state_terminal(StateStage stage)
 {
@@ -628,13 +560,13 @@ void handle_state_terminal(StateStage stage)
         if (linelog) {
             // Log line state every time it changes
             if (updateLineStates()) {
-                for (int line; line < 2; line++) {
+                for (int line; line < LINE_COUNT; line++) {
                     serial_printfln("LINESTATE%d: %s (%.2fV)", (line + 1), lineStateToStr(sLineStates[line]), sLineSenseVoltages[line]);
                 }
             }
             // Report linesense every second
             if (logTimer.update(ts)) {
-                for (int line; line < 2; line++) {
+                for (int line; line < LINE_COUNT; line++) {
                     int a = analogRead(sLineStates[line]);
                     float v = (5.0f * a) / ((1 << 10) - 1);
                     serial_printfln("LINESENSE%d: %u (%.2fV)", (line + 1), a, v);
@@ -677,15 +609,15 @@ void handle_state_terminal(StateStage stage)
             serial_println("HELP");
 
         } else if (!strcmp(cmd, "TONE")) {
-            if (pwm_dac_enabled()) {
-                pwm_dac_disable();
+            if (tone_is_enabled()) {
+                tone_disable();
             } else {
-                pwm_dac_enable();
+                tone_enable();
             }
         } else if (!strcmp(cmd, "LINE")) {
             // Report line state
             updateLineStates();
-            for (int line; line < 2; line++) {
+            for (int line; line < LINE_COUNT; line++) {
                 serial_printfln("LINESTATE%d: %s", (line + 1), lineStateToStr(sLineStates[line]));
                 serial_printfln("LINESENSE%d: %.2fV", (line + 1), sLineSenseVoltages[line]);
             }
