@@ -21,8 +21,8 @@
 #define POWER_DIS_PIN 2
 #define RELAY1_EN_PIN 3
 #define RELAY2_EN_PIN 4
-#define PPA_PIN 6
-#define PPB_PIN 7
+#define PPA_PIN 7
+#define PPB_PIN 6
 
 #define RELAY_DELAY_MS 50
 

@@ -22,12 +22,13 @@ enum LineState {
 
 enum State {
     STATE_NONE = 0,
-    STATE_INITIAL,  // initializing
-    STATE_IDLE,     // Nothing is happening. Phone is on-hook
-    STATE_RING,     // Ringing the phone
-    STATE_WAIT,     // Phone is off-hook
-    STATE_CALL,     // Call active
-    STATE_TERMINAL  // Debug and testing mode
+    STATE_INITIAL,   // initializing
+    STATE_IDLE,      // Nothing is happening. Phone is on-hook
+    STATE_RING,      // Ringing the phone
+    STATE_WAIT,      // Phone is off-hook
+    STATE_CALL,      // Call active
+    STATE_CALL_END,  // Call has ended
+    STATE_TERMINAL   // Debug and testing mode
 };
 
 #define LINE_COUNT 2
@@ -113,7 +114,7 @@ void setup()
 
     pinMode(TRIPSENSE_PIN, INPUT);
 
-    analogReference(DEFAULT);             // 5V
+    analogReference(DEFAULT);  // 5V
 
     for (int i = 0; i < LINE_COUNT; i++)  // First analog read must be discarded
         analogRead(lineSensePins[i]);
@@ -244,6 +245,13 @@ void handle_state_initial(StateStage stage)
     }
 }
 
+void reportLineStates()
+{
+    for (int line = 0; line < LINE_COUNT; line++) {
+        serial_printfln("LINE%d %s", line + 1, lineStateToStr(sLineStates[line]));
+    }
+}
+
 void handle_state_idle(StateStage stage)
 {
     static Timer2 waitTimer(false, 100);
@@ -265,9 +273,7 @@ void handle_state_idle(StateStage stage)
         if (!changed && compareLineStates(LINE_STATE_OFF_HOOK)) {
             // Go the next state when line has been stable for a moment and at least one line is off-hook
             if (waitTimer.update(ts)) {
-                for (int line = 0; line < LINE_COUNT; line++) {
-                    serial_printfln("LINE %s", lineStateToStr(sLineStates[line]));
-                }
+                reportLineStates();
                 setState(STATE_WAIT);
                 return;
             }
@@ -294,14 +300,6 @@ void handle_state_idle(StateStage stage)
             } else if (!strcmp(cmd, "TERMINAL")) {
                 setState(STATE_TERMINAL);
                 return;
-                /*
-                } else if (!strncmp(cmd, "CONF", 4)) {
-                    if (parse_and_apply_config(cmd + 4)) {
-                        serial_println("OK");
-                    } else {
-                        serial_println("INVALID");
-                    }
-                    */
             } else {
                 serial_println("INVALID");
             }
@@ -339,6 +337,7 @@ void handle_state_ring(StateStage stage)
             return;
         }
 
+        // Allow phone capacitor to charge
         digitalWrite(PPB_PIN, LOW);
         digitalWrite(PPA_PIN, HIGH);
 
@@ -369,6 +368,9 @@ void handle_state_ring(StateStage stage)
 
         ringState = true;
         serial_println("RING");
+
+        tone_enable();
+
         return;
     }
 
@@ -379,7 +381,6 @@ void handle_state_ring(StateStage stage)
             if (ring_trip) {
                 // phone has been picked up
                 serial_println("RING_TRIP");
-                serial_println("LINE OFF_HOOK");
                 setState(STATE_CALL);
                 return;
             }
@@ -407,7 +408,7 @@ void handle_state_ring(StateStage stage)
 
         if (ringingTimeout.update(ts)) {
             serial_println("RING_TIMEOUT");
-            setState(STATE_IDLE);
+            setState(STATE_CALL_END);
             return;
         }
 
@@ -416,7 +417,7 @@ void handle_state_ring(StateStage stage)
             if (ringTime.update(ts)) {
                 tone_disable();
                 // ring cycle expired, go to wait time
-                digitalWrite(PPA_PIN, HIGH);
+                digitalWrite(PPA_PIN, HIGH);  // keep high for ring trip detection
                 digitalWrite(PPB_PIN, LOW);
                 digitalWrite(LED_RED_PIN, HIGH);
                 ringState = false;
@@ -465,11 +466,16 @@ void discardCommands()
 void handle_state_wait(StateStage stage)
 {
     static Timer2 waitTimeout(true, 3000);
+    static Timer2 idleTimeout(true, 300);
+    static bool ring_enabled = false;
+
     uint32_t ts = millis();
 
     if (stage == ENTER) {
         waitTimeout.reset(ts);
+        idleTimeout.reset(ts);
         tone_enable();
+        ring_enabled = false;
     }
 
     if (stage == EXECUTE) {
@@ -485,12 +491,30 @@ void handle_state_wait(StateStage stage)
 
         updateLineStates();
 
-        if (compareLineStates(LINE_STATE_OFF_HOOK) == LINE_COUNT) {
+        int count = compareLineStates(LINE_STATE_OFF_HOOK);
+        if (count == LINE_COUNT) {
             setState(STATE_CALL);
+            return;
+        } else if (count == 0) {
+            tone_disable();
+            // Timeout here prevents sporadic state change if user is playing with
+            // the number dial.
+            if (idleTimeout.update(ts)) {
+                setState(STATE_IDLE);
+                return;
+            }
+            ring_enabled = true;
+            waitTimeout.reset(ts);
+        } else {
+            idleTimeout.reset(ts);
+        }
+        if (test_button()) {
+            ring_enabled = true;
         }
 
-        if (waitTimeout.update(ts)) {
-            // setState(STATE_RING);
+        if (ring_enabled && waitTimeout.update(ts)) {
+            setState(STATE_RING);
+            return;
         }
     }
 
@@ -501,41 +525,60 @@ void handle_state_wait(StateStage stage)
 
 void handle_state_call(StateStage stage)
 {
-    static bool toneActive;
-    static Timer2 toneTimer(true, 500);
-
     uint32_t ts = millis();
 
     if (stage == ENTER) {
         delay(200);  // wait for a while for things to stabilize
-        toneTimer.reset(ts);
-        toneActive = false;
     }
     if (stage == EXECUTE) {
-        if (updateLineStates()) {
-            if (compareLineStates(LINE_STATE_OFF_HOOK) == 1) {
-                // only one line active.
-                tone_enable();
-                toneActive = true;
-            } else if (compareLineStates(LINE_STATE_OFF_HOOK) == LINE_COUNT) {
-                // back to a normal call
-                tone_disable();
-                toneActive = false;
-            }
-            toneTimer.reset(ts);
+        updateLineStates();
+
+        if (compareLineStates(LINE_STATE_OFF_HOOK) == 1) {
+            // only one line active.
+            setState(STATE_CALL_END);
+            return;
         }
         // Go back to idle state when all the lines have hanged up and are on-hook
         if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
             setState(STATE_IDLE);
+            return;
         }
-        if (toneActive && toneTimer.update(ts)) {
+
+        if (test_button()) {
+            tone_enable();
+            delay(50);
+            while (test_button())
+                ;
+            tone_disable();
+        }
+    }
+    if (stage == LEAVE) {
+    }
+}
+
+void handle_state_call_end(StateStage stage)
+{
+    static Timer2 toneTimer(true, 300);
+    uint32_t ts = millis();
+
+    if (stage == ENTER) {
+        toneTimer.reset(ts);
+    }
+
+    if (stage == EXECUTE) {
+        if (toneTimer.update(ts)) {
             if (toneTimer.flipflop()) {
                 tone_enable();
             } else {
                 tone_disable();
             }
         }
+        updateLineStates();
+        if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
+            setState(STATE_IDLE);
+        }
     }
+
     if (stage == LEAVE) {
         tone_disable();
     }
@@ -552,7 +595,6 @@ void handle_state_terminal(StateStage stage)
         // digitalWrite(LED_GREEN, HIGH);
         digitalWrite(LED_RED_PIN, HIGH);
         serial_println("Testing terminal");
-        serial_println(">");
         linelog = false;
         logTimer.reset(ts);
     }
@@ -584,6 +626,8 @@ void handle_state_terminal(StateStage stage)
         } pinTable[] = {                           //
             {"SW1", SW1_PIN, PIN_RO},              //
             {"SW2", SW2_PIN, PIN_RO},              //
+            {"PPA", PPA_PIN, PIN_RW},              //
+            {"PPB", PPB_PIN, PIN_RW},              //
             {"RELAY1_EN", RELAY1_EN_PIN, PIN_RW},  //
             {"RELAY2_EN", RELAY2_EN_PIN, PIN_RW},  //
             {"POWER_DIS", POWER_DIS_PIN, PIN_RW},  //
@@ -597,23 +641,27 @@ void handle_state_terminal(StateStage stage)
             serial_println("LINE");
             serial_println("LINELOG");
             serial_println("RING");
-            serial_println("TONE");
+            serial_println("TONE [1|0]");
             for (int i = 0; i < pinCount; i++) {
                 if (pinTable[i].flags & PIN_RW) {
-                    serial_printfln("%s [1|0]", pinTable[i].name);
+                    serial_printfln("%s [1|0] %d", pinTable[i].name, digitalRead(pinTable[i].pin));
                 } else {
-                    serial_println(pinTable[i].name);
+                    serial_printfln("%s %d", pinTable[i].name, digitalRead(pinTable[i].pin));
                 }
             }
             serial_println("EXIT");
             serial_println("HELP");
 
-        } else if (!strcmp(cmd, "TONE")) {
-            if (tone_is_enabled()) {
-                tone_disable();
-            } else {
-                tone_enable();
+        } else if (!strncmp(cmd, "TONE", 4)) {
+            cmd += 4;
+            if (*cmd) {
+                if (atoi(cmd)) {
+                    tone_enable();
+                } else {
+                    tone_disable();
+                }
             }
+            serial_printfln("TONE %d", tone_is_enabled());
         } else if (!strcmp(cmd, "LINE")) {
             // Report line state
             updateLineStates();
@@ -644,10 +692,11 @@ void handle_state_terminal(StateStage stage)
                 }
             }
         }
-        serial_println(">");
     }
     if (stage == LEAVE) {
         digitalWrite(LED_RED_PIN, LOW);
+        digitalWrite(PPA_PIN, LOW);
+        digitalWrite(PPB_PIN, LOW);
         digitalWrite(RELAY1_EN_PIN, LOW);
         digitalWrite(RELAY2_EN_PIN, LOW);
         digitalWrite(POWER_DIS_PIN, HIGH);
@@ -694,6 +743,7 @@ static struct {
     { handle_state_ring, "RING"},
     { handle_state_wait, "WAIT"},
     { handle_state_call, "CALL"},
+    { handle_state_call_end, "CALL_END"},
     { handle_state_terminal, "TERMINAL"}
 };
 // clang-format on

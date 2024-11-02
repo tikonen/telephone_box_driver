@@ -1,6 +1,6 @@
 // Arduino Nano AtMega328p
 
-// Sample code to drive PWM encoded 20Hz Sine wave on ~600Hz PWM base
+// Drive PWM encoded sine wave
 // frequncy. PWM output is from Nano pin D9.
 // Output can be driven via RC filter to give smoothed out analog output.
 
