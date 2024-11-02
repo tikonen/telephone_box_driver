@@ -33,8 +33,8 @@ enum State {
 
 #define LINE_COUNT 2
 
-int relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
-int lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
+static int relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
+static int lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
 
 static LineState sLineStates[LINE_COUNT] = {LINE_STATE_UNKNOWN, LINE_STATE_UNKNOWN};
 
@@ -56,6 +56,7 @@ enum StateStage { ENTER, EXECUTE, LEAVE };
 #define RING_FREQ_HZ 25
 #define RING_CADENCE_ON_MS 2000
 #define RING_CADENCE_OFF_MS 2000
+#define DIALTONE_CADENCE_MS 300
 
 void _putchar(char character) { serial_write_char(character); }
 
@@ -116,9 +117,6 @@ void setup()
 
     analogReference(DEFAULT);  // 5V
 
-    for (int i = 0; i < LINE_COUNT; i++)  // First analog read must be discarded
-        analogRead(lineSensePins[i]);
-
     // Test relays
     for (int i = 0; i < LINE_COUNT; i++) {
         digitalWrite(relayPins[i], HIGH);
@@ -128,17 +126,7 @@ void setup()
 
     serial_printfln("INFO Telephone Intercom %s %s", VERSION, __DATE__);
 
-#if 0
-    if (!runSelfTest()) {
-        // Indicate problem by blinking leds
-        serial_println("WARN:-1");
-        for (int i = 0; i < 10; i++) {
-            digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
-            delay(200);
-        }
-    }
-#endif
-
+    // Tone generation
     pwm_dac_init();
 }
 
@@ -165,6 +153,7 @@ bool updateLineStates()
         LineState state = readLineState(line);
         changed = setLineState(line, state) || changed;
     }
+
     return changed;
 }
 
@@ -176,40 +165,6 @@ int compareLineStates(LineState state)
     }
     return c;
 }
-
-#if 0
-
-// Test assumes that phone is on-hook
-static bool runSelfTest()
-{
-    bool pass = true;
-
-    delay(100);
-
-    serial_printfln("INFO Telephone box %s", VERSION);
-    serial_printfln("INFO Test Button: %d", test_button());
-
-    digitalWrite(RELAY_EN_PIN, HIGH);
-    delay(RELAY_DELAY_MS);
-
-    LineState lineState = readLineState();
-    serial_printfln("INFO Line state: %s", lineStateToStr(lineState));
-
-    bool lineSenseCheck = (lineState == LINE_STATE_ON_HOOK);
-    serial_printfln("TEST Line sense: %s", lineSenseCheck ? "PASS" : "FAULT");
-    pass = pass && lineSenseCheck;
-
-    digitalWrite(RELAY_EN_PIN, LOW);
-    delay(RELAY_DELAY_MS);
-
-    bool tripCheck = !isRingTrip();
-    serial_printfln("TEST Ring-trip: %s", tripCheck ? "PASS" : "FAIL");
-
-    pass = pass && tripCheck;
-
-    return pass;
-}
-#endif
 
 const char* serial_read_cmd()
 {
@@ -525,18 +480,25 @@ void handle_state_wait(StateStage stage)
 
 void handle_state_call(StateStage stage)
 {
+    static Timer2 idleTimeout(true, 300);
     uint32_t ts = millis();
 
     if (stage == ENTER) {
         delay(200);  // wait for a while for things to stabilize
+        idleTimeout.reset(ts);
     }
+
     if (stage == EXECUTE) {
         updateLineStates();
 
         if (compareLineStates(LINE_STATE_OFF_HOOK) == 1) {
             // only one line active.
-            setState(STATE_CALL_END);
-            return;
+            if (idleTimeout.update(ts)) {
+                setState(STATE_CALL_END);
+                return;
+            }
+        } else {
+            idleTimeout.reset(ts);
         }
         // Go back to idle state when all the lines have hanged up and are on-hook
         if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
@@ -558,7 +520,7 @@ void handle_state_call(StateStage stage)
 
 void handle_state_call_end(StateStage stage)
 {
-    static Timer2 toneTimer(true, 300);
+    static Timer2 toneTimer(true, DIALTONE_CADENCE_MS);
     uint32_t ts = millis();
 
     if (stage == ENTER) {
@@ -576,6 +538,7 @@ void handle_state_call_end(StateStage stage)
         updateLineStates();
         if (compareLineStates(LINE_STATE_ON_HOOK) == LINE_COUNT) {
             setState(STATE_IDLE);
+            return;
         }
     }
 
