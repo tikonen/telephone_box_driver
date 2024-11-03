@@ -5,6 +5,8 @@
 #include "printf.h"
 #include "timer.hpp"
 #include "pwm_dac.hpp"
+#include "melody.hpp"
+#include "melody_player.hpp"
 
 #define wait_ms(ms) delay(ms)
 
@@ -643,6 +645,12 @@ void handle_state_terminal(StateStage stage)
         } else if (!strcmp(cmd, "EXIT")) {
             setState(STATE_WAIT);
             return;
+        } else if (!strcmp(cmd, "MELODY")) {
+            melody_init();
+            melody_play(notes, noteDurations, NOTE_COUNT);
+            while (melody_busy())
+                ;
+            pwm_dac_init();
         } else {
             for (int i = 0; i < pinCount; i++) {
                 if (!strncmp(cmd, pinTable[i].name, strlen(pinTable[i].name))) {
