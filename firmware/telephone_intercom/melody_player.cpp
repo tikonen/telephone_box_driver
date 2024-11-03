@@ -6,7 +6,6 @@
 static const uint16_t* playingNotes;
 static const uint16_t* playingNoteDurations;
 static uint16_t playingNoteCount;
-static uint16_t playingIdx;
 
 void melody_init()
 {
@@ -28,7 +27,6 @@ void melody_init()
     playingNotes = NULL;
     playingNoteDurations = NULL;
     playingNoteCount = 0;
-    playingIdx = 0;
 
     tone_init();
 }
@@ -50,46 +48,48 @@ void melody_play_blocking(const uint16_t* notes, const uint16_t* durations, int 
     tone_set(0);
 }
 
-void melody_play(const uint16_t* notes, const uint16_t* durations, int n)
+bool melody_busy() { return TIMSK2; }
+
+static uint16_t elapsedms = 0;
+static uint16_t noteDurationms = 0;
+static uint16_t playingIdx = 0;
+
+void melody_stop()
 {
     TIMSK2 = 0;
     TCNT2 = 0;
+    elapsedms = 0;
+    noteDurationms = 0;
+    playingIdx = 0;
+    tone_set(0);
+}
 
+void melody_play(const uint16_t* notes, const uint16_t* durations, int n)
+{
+    melody_stop();
 
     playingNotes = notes;
     playingNoteDurations = durations;
     playingNoteCount = n;
-    playingIdx = 0;
 
     // overflow interrupt enable
     TIMSK2 = _BV(TOIE2);
 }
 
-bool melody_busy() { return TIMSK2; }
-
-void melody_stop()
-{
-    TIMSK2 = 0;
-    tone_set(0);
-}
-
 ISR(TIMER2_OVF_vect)
 {
-    static uint16_t mscount = 0;
-    static uint16_t noteDuration = 0;
+    // Overflow interrupt is triggered in 1ms intervals.
+    elapsedms++;
 
-    mscount++;
-
-    if (mscount >= noteDuration) {
-        mscount = 0;
+    if (elapsedms >= noteDurationms) {
+        elapsedms = 0;
         if (playingIdx >= playingNoteCount) {
-            playingIdx = 0;
-            TIMSK2 = 0;
+            melody_stop();
             return;
         }
 
         tone_set(pgm_read_word_near(playingNotes + playingIdx));
-        noteDuration = pgm_read_word_near(playingNoteDurations + playingIdx);
+        noteDurationms = pgm_read_word_near(playingNoteDurations + playingIdx);
         playingIdx++;
     }
 }

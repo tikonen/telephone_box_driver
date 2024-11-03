@@ -7,16 +7,17 @@ inline void tone_init()
     TIMSK1 = 0;
 }
 
+// Output 50% duty PWM signal from pin D9 at frequency
 inline void tone_set(unsigned int freq)
 {
     if (freq) {
         // Write frequency
-        TCNT1 = 0;  // Reset counter
+        TCNT1 = 0;               // Reset counter
         uint16_t top = F_CPU / 8 / 2 / freq;
-        ICR1 = top;       // Set TOP to the period
-        OCR1A = top / 2;  // Set compare to half the period
+        ICR1 = top;              // Set TOP to the period
+        OCR1A = top / 2;         // Set compare to half the period
 
-        TCCR1A |= _BV(COM1A1);  // enable output pin
+        TCCR1A |= _BV(COM1A1);   // enable output pin
     } else {
         TCCR1A &= ~_BV(COM1A1);  // disable output pin
     }

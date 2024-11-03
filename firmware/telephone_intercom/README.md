@@ -42,18 +42,6 @@ Print current line status
 Response: `LINE` _status_
 <br>States: Any
 
-**`CONF <param1> <param2> ...\r\n`**
-Board configuration.
-
-Parameters
-*  `DM:<n>`         int. 0 disable, 1: single digit dial (default)
-*  `TON:<voltage>`  float. On-hook threshold voltage level
-*  `TOFF:<voltage>` float. Off-hook threshold voltage level.
-*  `HZ:<freq>`      int. Ringing frequency
-
-Response: Current configuration when run without parameters
-<br>States: IDLE
-
 **`TERMINAL\r\n`**
 Debug terminal mode
 
@@ -93,22 +81,6 @@ States: Any
 Self test result
 
 States: INITIAL (bootup)
-
-**`DIAL_BEGIN\r\n`**
-Number dial sequence started by the phone user.
-
-States: DIAL
-
-**`DIAL <digit>\r\n`**
-A number was succesfully dialed.
-
-States: DIAL
-
-**`DIAL_ERROR\r\n`**
-User dialed number incorrectly (intentionally or timed out).
-Phone must be put back on-hook for at least a half a second to reset error condition.
-
-States: DIAL
 
 **`RING_TRIP\r\n`**
 Ringing phone was picked up.
@@ -164,15 +136,11 @@ Phone is off-hook (user has picked up the phone).
 Play standard line tone to indicate a working phone for the user. (beeeeeeeep...)
 Audio active.
 
-**`DIAL`**
-User has started to select a number. After selecting a digit the device returns to `WAIT` state.
-Stop playing line tone on first digit dial.
-Audio active and should not be used with high volume as it may confuse the logic counting the dial pulses from the phone.
+**`CALL`**
+All lines are off-hook
 
-**`DIAL_ERROR`**
-Dialing failed. User must put phone back on-hook to reset the error.
-Play standard error tone. (beep-beep-beep-beep)
-Audio active.
+**`CALL_END`**
+Call has ended. All lines must be put on-hook to continue.
 
 **`RING`**
 Phone is ringing. Returns to `IDLE` if ring timeouts (nobody picked up phone within timelimit) or to `WAIT` when phone is picked up.

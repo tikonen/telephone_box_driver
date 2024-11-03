@@ -78,9 +78,10 @@ bool setLineState(int line, LineState newState)
     return oldState != sLineStates[line];
 }
 
-#define tone_is_enabled() pwm_dac_enabled()
-#define tone_enable() pwm_dac_enable()
-#define tone_disable() pwm_dac_disable()
+#define dialtone_init() pwm_dac_init()
+#define dialtone_is_enabled() pwm_dac_enabled()
+#define dialtone_enable() pwm_dac_enable()
+#define dialtone_disable() pwm_dac_disable()
 
 // static bool runSelfTest();
 
@@ -129,7 +130,7 @@ void setup()
     serial_printfln("INFO Telephone Intercom %s %s", VERSION, __DATE__);
 
     // Tone generation
-    pwm_dac_init();
+    dialtone_init();
 }
 
 
@@ -281,7 +282,7 @@ void handle_state_ring(StateStage stage)
     uint32_t ts = millis();
 
     if (stage == ENTER) {
-        tone_disable();
+        dialtone_disable();
 
         // Ensure that there is at least one line to ring
         updateLineStates();
@@ -326,7 +327,7 @@ void handle_state_ring(StateStage stage)
         ringState = true;
         serial_println("RING");
 
-        tone_enable();
+        dialtone_enable();
 
         return;
     }
@@ -372,7 +373,7 @@ void handle_state_ring(StateStage stage)
         if (ringState) {
             // phone is ringing
             if (ringTime.update(ts)) {
-                tone_disable();
+                dialtone_disable();
                 // ring cycle expired, go to wait time
                 digitalWrite(PPA_PIN, HIGH);  // keep high for ring trip detection
                 digitalWrite(PPB_PIN, LOW);
@@ -389,7 +390,7 @@ void handle_state_ring(StateStage stage)
                 }
             }
         } else if (ringPauseTime.update(ts)) {
-            tone_enable();
+            dialtone_enable();
             ringState = true;
             serial_println("RING");
             ringTime.reset(ts);
@@ -399,7 +400,7 @@ void handle_state_ring(StateStage stage)
     }
 
     if (stage == LEAVE) {
-        tone_disable();
+        dialtone_disable();
         digitalWrite(LED_RED_PIN, LOW);
         digitalWrite(PPB_PIN, LOW);
         digitalWrite(PPA_PIN, LOW);
@@ -431,7 +432,7 @@ void handle_state_wait(StateStage stage)
     if (stage == ENTER) {
         waitTimeout.reset(ts);
         idleTimeout.reset(ts);
-        tone_enable();
+        dialtone_enable();
         ring_enabled = false;
     }
 
@@ -453,7 +454,7 @@ void handle_state_wait(StateStage stage)
             setState(STATE_CALL);
             return;
         } else if (count == 0) {
-            tone_disable();
+            dialtone_disable();
             // Timeout here prevents sporadic state change if user is playing with
             // the number dial.
             if (idleTimeout.update(ts)) {
@@ -476,7 +477,7 @@ void handle_state_wait(StateStage stage)
     }
 
     if (stage == LEAVE) {
-        tone_disable();
+        dialtone_disable();
     }
 }
 
@@ -509,11 +510,11 @@ void handle_state_call(StateStage stage)
         }
 
         if (test_button()) {
-            tone_enable();
+            dialtone_enable();
             delay(50);
             while (test_button())
                 ;
-            tone_disable();
+            dialtone_disable();
         }
     }
     if (stage == LEAVE) {
@@ -532,9 +533,9 @@ void handle_state_call_end(StateStage stage)
     if (stage == EXECUTE) {
         if (toneTimer.update(ts)) {
             if (toneTimer.flipflop()) {
-                tone_enable();
+                dialtone_enable();
             } else {
-                tone_disable();
+                dialtone_disable();
             }
         }
         updateLineStates();
@@ -545,7 +546,7 @@ void handle_state_call_end(StateStage stage)
     }
 
     if (stage == LEAVE) {
-        tone_disable();
+        dialtone_disable();
     }
 }
 
@@ -606,6 +607,7 @@ void handle_state_terminal(StateStage stage)
             serial_println("LINE");
             serial_println("LINELOG");
             serial_println("RING");
+            serial_println("MELODY");
             serial_println("TONE [1|0]");
             for (int i = 0; i < pinCount; i++) {
                 if (pinTable[i].flags & PIN_RW) {
@@ -621,12 +623,12 @@ void handle_state_terminal(StateStage stage)
             cmd += 4;
             if (*cmd) {
                 if (atoi(cmd)) {
-                    tone_enable();
+                    dialtone_enable();
                 } else {
-                    tone_disable();
+                    dialtone_disable();
                 }
             }
-            serial_printfln("TONE %d", tone_is_enabled());
+            serial_printfln("TONE %d", dialtone_is_enabled());
         } else if (!strcmp(cmd, "LINE")) {
             // Report line state
             updateLineStates();
@@ -647,10 +649,17 @@ void handle_state_terminal(StateStage stage)
             return;
         } else if (!strcmp(cmd, "MELODY")) {
             melody_init();
-            melody_play(notes, noteDurations, NOTE_COUNT);
-            while (melody_busy())
-                ;
-            pwm_dac_init();
+            bool playing = true;
+            do {
+                melody_play(notes, noteDurations, NOTE_COUNT);
+                while (melody_busy()) {
+                    if ((cmd = serial_read_line()) && cmd[0] == '\0') {
+                        melody_stop();
+                        playing = false;
+                    }
+                }
+            } while (playing);
+            dialtone_init();
         } else {
             for (int i = 0; i < pinCount; i++) {
                 if (!strncmp(cmd, pinTable[i].name, strlen(pinTable[i].name))) {
