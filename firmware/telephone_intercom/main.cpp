@@ -650,16 +650,19 @@ void handle_state_terminal(StateStage stage)
         } else if (!strcmp(cmd, "MELODY")) {
             melody_init();
             bool playing = true;
+            serial_printfln("MELODY %d", 1);
             do {
                 melody_play(notes, noteDurations, NOTE_COUNT);
                 while (melody_busy()) {
-                    if ((cmd = serial_read_line()) && cmd[0] == '\0') {
+                    if (serial_read_line()) {
                         melody_stop();
                         playing = false;
                     }
                 }
             } while (playing);
             dialtone_init();
+            dialtone_disable();
+            serial_printfln("MELODY %d", 0);
         } else {
             for (int i = 0; i < pinCount; i++) {
                 if (!strncmp(cmd, pinTable[i].name, strlen(pinTable[i].name))) {
