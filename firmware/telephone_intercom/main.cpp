@@ -5,7 +5,16 @@
 #include "printf.h"
 #include "timer.hpp"
 #include "pwm_dac.hpp"
-#include "melody.hpp"
+
+#include "melody-monkeyisland.hpp"
+// #include "melody-mk.hpp"
+// #include "melody-sandstorm.hpp"
+// #include "melody-nyancat.hpp"
+// #include "melody-mario.hpp"
+// #include "melody-mario-win.hpp"
+// #include "melody-pacman.hpp"
+// #include "melody-taps.hpp"
+
 #include "melody_player.hpp"
 
 #define wait_ms(ms) delay(ms)
@@ -652,7 +661,7 @@ void handle_state_terminal(StateStage stage)
             bool playing = true;
             serial_printfln("MELODY %d", 1);
             do {
-                melody_play(notes, noteDurations, NOTE_COUNT);
+                melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
                 while (melody_busy()) {
                     if (serial_read_line()) {
                         melody_stop();
