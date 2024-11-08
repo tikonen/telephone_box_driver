@@ -46,10 +46,11 @@ durations = []
 linere = re.compile(r'([0-9]+) ([0-9]+)')
 
 for line in args.input:
+    line = line.strip()
     if line:
         m = linere.match(line)
         if not m:
-            raise ValueError(f"Unknown line: {line}")
+            raise ValueError(f"Unknown line: \"{line}\"")
         tone = int(m[1])
         duration = int(m[2])
         if duration > 1:
@@ -142,7 +143,7 @@ def export_data_arrays(data, type):
     for k in sorted(valuemap.keys())[1:]:
         hdr.append(valuemap[k])
     ratio = (2*len(hdr) + len(encdata))/(2*len(data))
-    print(f"// Compression ratio {100*(1-ratio):0.1f}%%")
+    print(f"// Compression ratio {100*(1-ratio):0.1f}%")
     keybits = ceil(log2(numvals))
     print(f"// {numvals} unique keys. Key size {keybits} bits")
 

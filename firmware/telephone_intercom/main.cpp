@@ -18,10 +18,14 @@
 
 #include "melody_player.hpp"
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
 struct MelodyData {
     const uint8_t* tones;
     const uint8_t* durations;
-} melodyTable[] = {
+};
+
+const MelodyData melodyTable[] PROGMEM = {
     //
     {mariowin_toneNotes, mariowin_toneDurations},    //
     {mk_toneNotes, mk_toneDurations},                //
@@ -33,6 +37,8 @@ struct MelodyData {
     {sandstorm_toneNotes, sandstorm_toneDurations},  //
     {taps_toneNotes, taps_toneDurations},            //
 };
+
+void read_melody(MelodyData* dst, int idx) { memcpy_P(dst, melodyTable + idx, sizeof(MelodyData)); }
 
 #define wait_ms(ms) delay(ms)
 
@@ -61,8 +67,8 @@ enum State {
 
 #define LINE_COUNT 2
 
-static uint8_t relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
-static uint8_t lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
+static const int8_t relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
+static const int8_t lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
 
 static LineState sLineStates[LINE_COUNT] = {LINE_STATE_UNKNOWN, LINE_STATE_UNKNOWN};
 
@@ -586,7 +592,7 @@ void handle_state_terminal(StateStage stage)
     if (stage == ENTER) {
         // digitalWrite(LED_GREEN, HIGH);
         digitalWrite(LED_RED_PIN, HIGH);
-        serial_println("Testing terminal");
+        serial_println("TERMINAL");
         serial_write_char('>');
         linelog = false;
         logTimer.reset(ts);
@@ -596,15 +602,20 @@ void handle_state_terminal(StateStage stage)
             // Log line state every time it changes
             if (updateLineStates()) {
                 for (int line; line < LINE_COUNT; line++) {
-                    serial_printfln("LINESTATE%d: %s (%.2fV)", (line + 1), lineStateToStr(sLineStates[line]), sLineSenseVoltages[line]);
+                    serial_printfln("LINESTATE%d: %s", (line + 1), lineStateToStr(sLineStates[line]));
+                    serial_printfln("LINESENSE%d: %.2fV", (line + 1), sLineSenseVoltages[line]);
+                    logTimer.reset(ts);
                 }
             }
             // Report linesense every second
             if (logTimer.update(ts)) {
                 for (int line; line < LINE_COUNT; line++) {
-                    int a = analogRead(sLineStates[line]);
-                    float v = (5.0f * a) / ((1 << 10) - 1);
-                    serial_printfln("LINESENSE%d: %u (%.2fV)", (line + 1), a, v);
+                    /*
+                      int a = analogRead(sLineStates[line]);
+                      float v = (5.0f * a) / ((1 << 10) - 1);
+                      serial_printfln("LINESENSE%d: %u (%.2fV)", (line + 1), a, v);
+                      */
+                    serial_printfln("LINESENSE%d: %.2fV", (line + 1), sLineSenseVoltages[line]);
                 }
             }
         }
@@ -680,7 +691,9 @@ void handle_state_terminal(StateStage stage)
             unsigned int midx = 0;
             do {
                 serial_printfln("MELODY %d", midx);
-                melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
+                MelodyData melody;
+                read_melody(&melody, midx);
+                melody_play_encoded(melody.tones, melody.durations);
                 //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
                 while (melody_busy()) {
                     if (serial_read_line()) {
@@ -689,7 +702,7 @@ void handle_state_terminal(StateStage stage)
                     }
                 }
                 midx++;
-                if (midx >= sizeof(melodyTable) / sizeof(melodyTable[0])) midx = 0;
+                if (midx >= ARRAY_SIZE(melodyTable)) midx = 0;
                 delay(1000);
             } while (playing);
             dialtone_init();
