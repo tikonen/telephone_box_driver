@@ -1,7 +1,14 @@
-#pragma once
-// 218 bytes
+# pragma once
 // clang-format off
-const uint16_t nyancat_notes[54] PROGMEM = { 1198, 1345, 1007, 1007, 0, 800, 951, 897, 800, 0, 800, 897, 951, 951, 897, 800, 897, 1007, 1198, 1345, 1007, 1198, 897, 1007, 800, 897, 800, 1007, 1198, 1345, 1007, 1198, 897, 1007, 800, 951, 1007, 951, 897, 800, 897, 951, 800, 897, 1007, 1198, 897, 1007, 897, 800, 897, 800, 897, 800,  };
-const uint16_t nyancat_noteDurations[54] PROGMEM = { 200, 200, 100, 100, 100, 100, 100, 100, 100, 100, 200, 200, 200, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 200, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 100, 100, 100, 100, 100, 100, 100, 100, 200, 200, 200, 200,  };
-const uint16_t nyancat_noteCount = 54;
-// clang-format on
+// Compression ratio 67.6%%
+// 7 unique keys. Key size 3 bits
+const uint16_t nyancat_toneNotesDataHdr[] PROGMEM = {0x4007,0x320,0x381,0x3b7,0x3ef,0x4ae,0x541};
+#define nyancat_toneNotesDataHdrSize 14
+const uint8_t nyancat_toneNotesData[] PROGMEM = {0xba,0x40,0x5a,0x20,0xa6,0xd1,0x52,0xe9,0x54,0x28,0xcb,0xa5,0x50,0xb8,0xd1,0x4c,0xa9,0x54,0x45,0x14,0x40};
+#define nyancat_toneNotesDataSize 21
+// Compression ratio 81.5%%
+// 3 unique keys. Key size 2 bits
+const uint16_t nyancat_toneDurationsDataHdr[] PROGMEM = {0x4003,0x64,0xc8};
+#define nyancat_toneDurationsDataHdrSize 6
+const uint8_t nyancat_toneDurationsData[] PROGMEM = {0xa5,0x55,0x5a,0x95,0x55,0x55,0x56,0x95,0x55,0x55,0x65,0x55,0x5a,0xa0};
+#define nyancat_toneDurationsDataSize 14

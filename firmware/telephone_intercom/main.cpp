@@ -7,15 +7,43 @@
 #include "pwm_dac.hpp"
 
 #include "melody-monkeyisland.hpp"
-// #include "melody-mk.hpp"
-// #include "melody-sandstorm.hpp"
-// #include "melody-nyancat.hpp"
-// #include "melody-mario.hpp"
-// #include "melody-mario-win.hpp"
-// #include "melody-pacman.hpp"
-// #include "melody-taps.hpp"
+#include "melody-mario.hpp"
+#include "melody-mario-win.hpp"
+#include "melody-beverly.hpp"
+#include "melody-pacman.hpp"
+#include "melody-nyancat.hpp"
+#include "melody-sandstorm.hpp"
+#include "melody-taps.hpp"
+#include "melody-mk.hpp"
 
 #include "melody_player.hpp"
+
+struct Melody {
+    const uint16_t* notesHdr;
+    const uint8_t* notesData;
+    const uint16_t notesLen;
+    const uint16_t* durationsHdr;
+    const uint8_t* durationsData;
+    const uint16_t durationsLen;
+} melodyTable[] = {
+    //
+    {sandstorm_toneNotesDataHdr, sandstorm_toneNotesData, sandstorm_toneNotesDataSize, sandstorm_toneDurationsDataHdr, sandstorm_toneDurationsData,
+        sandstorm_toneDurationsDataSize},
+    {nyancat_toneNotesDataHdr, nyancat_toneNotesData, nyancat_toneNotesDataSize, nyancat_toneDurationsDataHdr, nyancat_toneDurationsData,
+        nyancat_toneDurationsDataSize},                                                                                                                 //
+    {mario_toneNotesDataHdr, mario_toneNotesData, mario_toneNotesDataSize, mario_toneDurationsDataHdr, mario_toneDurationsData,
+        mario_toneDurationsDataSize},                                                                                                                   //
+    {pacman_toneNotesDataHdr, pacman_toneNotesData, pacman_toneNotesDataSize, pacman_toneDurationsDataHdr, pacman_toneDurationsData,
+        pacman_toneDurationsDataSize},                                                                                                                  //
+    {monkey_toneNotesDataHdr, monkey_toneNotesData, monkey_toneNotesDataSize, monkey_toneDurationsDataHdr, monkey_toneDurationsData,
+        monkey_toneDurationsDataSize},                                                                                                                  //
+    {mariowin_toneNotesDataHdr, mariowin_toneNotesData, mariowin_toneNotesDataSize, mariowin_toneDurationsDataHdr, mariowin_toneDurationsData,
+        mariowin_toneDurationsDataSize},                                                                                                                //
+    {beverly_toneNotesDataHdr, beverly_toneNotesData, beverly_toneNotesDataSize, beverly_toneDurationsDataHdr, beverly_toneDurationsData,
+        beverly_toneDurationsDataSize},                                                                                                                 //
+    {mk_toneNotesDataHdr, mk_toneNotesData, mk_toneNotesDataSize, mk_toneDurationsDataHdr, mk_toneDurationsData, mk_toneDurationsDataSize},             //
+    {taps_toneNotesDataHdr, taps_toneNotesData, taps_toneNotesDataSize, taps_toneDurationsDataHdr, taps_toneDurationsData, taps_toneDurationsDataSize}  //
+};
 
 #define wait_ms(ms) delay(ms)
 
@@ -659,15 +687,21 @@ void handle_state_terminal(StateStage stage)
         } else if (!strcmp(cmd, "MELODY")) {
             melody_init();
             bool playing = true;
-            serial_printfln("MELODY %d", 1);
+            unsigned int midx = 0;
             do {
-                melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
+                serial_printfln("MELODY %d", midx);
+                Melody& m = melodyTable[midx];
+                melody_play_encoded(m.notesHdr, m.notesData, m.notesLen, m.durationsHdr, m.durationsData, m.durationsLen);
+                //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
                 while (melody_busy()) {
                     if (serial_read_line()) {
                         melody_stop();
                         playing = false;
                     }
                 }
+                midx++;
+                if (midx >= sizeof(melodyTable) / sizeof(melodyTable[0])) midx = 0;
+                delay(1000);
             } while (playing);
             dialtone_init();
             dialtone_disable();

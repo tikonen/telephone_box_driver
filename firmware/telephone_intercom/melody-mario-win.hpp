@@ -1,7 +1,14 @@
-#pragma once
-// 110 bytes
+# pragma once
 // clang-format off
-const uint16_t mario_win_notes[27] PROGMEM = { 130, 262, 330, 392, 523, 660, 784, 660, 146, 262, 311, 415, 523, 622, 831, 622, 155, 294, 349, 466, 588, 699, 933, 933, 933, 933, 1047,  };
-const uint16_t mario_win_noteDurations[27] PROGMEM = { 100, 100, 100, 100, 100, 100, 300, 300, 100, 100, 100, 100, 100, 100, 300, 300, 100, 100, 100, 100, 100, 100, 300, 100, 100, 100, 400,  };
-const uint16_t mario_win_noteCount = 27;
-// clang-format on
+// Compression ratio -9.3%%
+// 21 unique keys. Key size 5 bits
+const uint16_t mariowin_toneNotesDataHdr[] PROGMEM = {0x15,0x82,0x92,0x9b,0x106,0x126,0x137,0x14a,0x15d,0x188,0x19f,0x1d2,0x20b,0x24c,0x26e,0x294,0x2bb,0x310,0x33f,0x3a5,0x417};
+#define mariowin_toneNotesDataHdrSize 42
+const uint8_t mariowin_toneNotesData[] PROGMEM = {0x9,0xe,0x96,0x3e,0x2f,0x11,0xc,0xa6,0x3a,0x4e,0x19,0x50,0xb6,0xc2,0x73,0x9c,0xe8};
+#define mariowin_toneNotesDataSize 17
+// Compression ratio 72.2%%
+// 4 unique keys. Key size 2 bits
+const uint16_t mariowin_toneDurationsDataHdr[] PROGMEM = {0x2004,0x64,0x12c,0x190};
+#define mariowin_toneDurationsDataHdrSize 8
+const uint8_t mariowin_toneDurationsData[] PROGMEM = {0x55,0x5a,0x55,0x5a,0x55,0x59,0x5c};
+#define mariowin_toneDurationsDataSize 7

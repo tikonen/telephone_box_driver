@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Script accepts same arguments as linux beep command and outputs a C/C++ header
+# Script accepts same arguments as linux beep command and outputs a raw table or a C/C++ header
 # with the tones and durations.
+#
+# Env variables
+# BEEP_EXPORT_RAW     If defined data is exported as raw table
+# BEEP_EXPORT_PREFIX  Exported C header variables are prefixed with this string
+#
 
 POSITIONAL_ARGS=()
 FREQS=()
@@ -54,24 +59,24 @@ while [[ $# -gt 0 ]]; do
       ;;
 	  -r)
 	    REPEATS="${2%.*}"
-      shift 
-      shift 
+      shift
+      shift
       ;;
     -l)
       DURATION="${2%.*}"
-      shift 
-      shift 
+      shift
+      shift
       ;;
     -D)
       DELAY="${2%.*}"
-      shift 
-      shift 
+      shift
+      shift
         ;;
     -d)
       DELAY="${2%.*}"
       DELAYLASTSKIP=1
-      shift 
-      shift 
+      shift
+      shift
       ;;
     -n)
       # next
@@ -94,15 +99,22 @@ done
 # add the last note that was not followed by the '-n' argument
 add_repeated_note
 
-# Output a C/C++ header file
-COUNT=${#DURATIONS[@]}
-echo "#pragma once"
-echo  "//" $((4 * $COUNT + 2)) "bytes"
-echo "// clang-format off"
-#echo -n "// " ; date
-printf -v joined '%s, ' "${FREQS[@]}"
-echo "const uint16_t ${BEEPPREFIX}notes[${COUNT}] PROGMEM = { ${joined%,} };"
-printf -v joined '%s, ' "${DURATIONS[@]}"
-echo "const uint16_t ${BEEPPREFIX}noteDurations[${COUNT}] PROGMEM = { ${joined%,} };"
-echo "const uint16_t ${BEEPPREFIX}noteCount = ${COUNT};"
-echo "// clang-format on"
+if [[ -v BEEP_EXPORT_RAW ]]; then
+  len=${#FREQS[@]}
+  for((i=0; i<$len; i++)); do
+    echo "${FREQS[$i]} ${DURATIONS[$i]}"
+  done
+else
+  # Output a C/C++ header file
+  COUNT=${#DURATIONS[@]}
+  echo "#pragma once"
+  echo  "//" $((4 * $COUNT + 2)) "bytes"
+  echo "// clang-format off"
+  #echo -n "// " ; date
+  printf -v joined '%s, ' "${FREQS[@]}"
+  echo "const uint16_t ${BEEP_EXPORT_PREFIX}notes[${COUNT}] PROGMEM = { ${joined%,} };"
+  printf -v joined '%s, ' "${DURATIONS[@]}"
+  echo "const uint16_t ${BEEP_EXPORT_PREFIX}durations[${COUNT}] PROGMEM = { ${joined%,} };"
+  echo "const uint16_t ${BEEP_EXPORT_PREFIX}noteCount = ${COUNT};"
+  echo "// clang-format on"
+fi
