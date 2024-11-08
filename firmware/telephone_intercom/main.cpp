@@ -13,36 +13,25 @@
 #include "melody-pacman.hpp"
 #include "melody-nyancat.hpp"
 #include "melody-sandstorm.hpp"
-#include "melody-taps.hpp"
 #include "melody-mk.hpp"
+#include "melody-taps.hpp"
 
 #include "melody_player.hpp"
 
-struct Melody {
-    const uint16_t* notesHdr;
-    const uint8_t* notesData;
-    const uint16_t notesLen;
-    const uint16_t* durationsHdr;
-    const uint8_t* durationsData;
-    const uint16_t durationsLen;
+struct MelodyData {
+    const uint8_t* tones;
+    const uint8_t* durations;
 } melodyTable[] = {
     //
-    {sandstorm_toneNotesDataHdr, sandstorm_toneNotesData, sandstorm_toneNotesDataSize, sandstorm_toneDurationsDataHdr, sandstorm_toneDurationsData,
-        sandstorm_toneDurationsDataSize},
-    {nyancat_toneNotesDataHdr, nyancat_toneNotesData, nyancat_toneNotesDataSize, nyancat_toneDurationsDataHdr, nyancat_toneDurationsData,
-        nyancat_toneDurationsDataSize},                                                                                                                 //
-    {mario_toneNotesDataHdr, mario_toneNotesData, mario_toneNotesDataSize, mario_toneDurationsDataHdr, mario_toneDurationsData,
-        mario_toneDurationsDataSize},                                                                                                                   //
-    {pacman_toneNotesDataHdr, pacman_toneNotesData, pacman_toneNotesDataSize, pacman_toneDurationsDataHdr, pacman_toneDurationsData,
-        pacman_toneDurationsDataSize},                                                                                                                  //
-    {monkey_toneNotesDataHdr, monkey_toneNotesData, monkey_toneNotesDataSize, monkey_toneDurationsDataHdr, monkey_toneDurationsData,
-        monkey_toneDurationsDataSize},                                                                                                                  //
-    {mariowin_toneNotesDataHdr, mariowin_toneNotesData, mariowin_toneNotesDataSize, mariowin_toneDurationsDataHdr, mariowin_toneDurationsData,
-        mariowin_toneDurationsDataSize},                                                                                                                //
-    {beverly_toneNotesDataHdr, beverly_toneNotesData, beverly_toneNotesDataSize, beverly_toneDurationsDataHdr, beverly_toneDurationsData,
-        beverly_toneDurationsDataSize},                                                                                                                 //
-    {mk_toneNotesDataHdr, mk_toneNotesData, mk_toneNotesDataSize, mk_toneDurationsDataHdr, mk_toneDurationsData, mk_toneDurationsDataSize},             //
-    {taps_toneNotesDataHdr, taps_toneNotesData, taps_toneNotesDataSize, taps_toneDurationsDataHdr, taps_toneDurationsData, taps_toneDurationsDataSize}  //
+    {mariowin_toneNotes, mariowin_toneDurations},    //
+    {mk_toneNotes, mk_toneDurations},                //
+    {mario_toneNotes, mario_toneDurations},          //
+    {pacman_toneNotes, pacman_toneDurations},        //
+    {monkey_toneNotes, monkey_toneDurations},        //
+    {nyancat_toneNotes, nyancat_toneDurations},      //
+    {beverly_toneNotes, beverly_toneDurations},      //
+    {sandstorm_toneNotes, sandstorm_toneDurations},  //
+    {taps_toneNotes, taps_toneDurations},            //
 };
 
 #define wait_ms(ms) delay(ms)
@@ -72,8 +61,8 @@ enum State {
 
 #define LINE_COUNT 2
 
-static int relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
-static int lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
+static uint8_t relayPins[LINE_COUNT] = {RELAY1_EN_PIN, RELAY2_EN_PIN};
+static uint8_t lineSensePins[LINE_COUNT] = {LINESENSE1_PIN, LINESENSE2_PIN};
 
 static LineState sLineStates[LINE_COUNT] = {LINE_STATE_UNKNOWN, LINE_STATE_UNKNOWN};
 
@@ -598,6 +587,7 @@ void handle_state_terminal(StateStage stage)
         // digitalWrite(LED_GREEN, HIGH);
         digitalWrite(LED_RED_PIN, HIGH);
         serial_println("Testing terminal");
+        serial_write_char('>');
         linelog = false;
         logTimer.reset(ts);
     }
@@ -690,8 +680,7 @@ void handle_state_terminal(StateStage stage)
             unsigned int midx = 0;
             do {
                 serial_printfln("MELODY %d", midx);
-                Melody& m = melodyTable[midx];
-                melody_play_encoded(m.notesHdr, m.notesData, m.notesLen, m.durationsHdr, m.durationsData, m.durationsLen);
+                melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
                 //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
                 while (melody_busy()) {
                     if (serial_read_line()) {
@@ -705,7 +694,7 @@ void handle_state_terminal(StateStage stage)
             } while (playing);
             dialtone_init();
             dialtone_disable();
-            serial_printfln("MELODY %d", 0);
+
         } else {
             for (int i = 0; i < pinCount; i++) {
                 if (!strncmp(cmd, pinTable[i].name, strlen(pinTable[i].name))) {
@@ -718,6 +707,7 @@ void handle_state_terminal(StateStage stage)
                 }
             }
         }
+        serial_write_char('>');
     }
     if (stage == LEAVE) {
         digitalWrite(LED_RED_PIN, LOW);

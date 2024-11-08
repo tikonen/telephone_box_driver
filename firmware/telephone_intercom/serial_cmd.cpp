@@ -100,6 +100,7 @@ int serial_read(char* buffer, int count)
     return n;
 }
 
+void serial_write(const char* msg) { Serial.print(msg); }
 void serial_write_line(const char* msg) { Serial.println(msg); }
 
 void serial_write_char(char c) { Serial.write(c); }

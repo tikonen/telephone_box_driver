@@ -12,12 +12,16 @@ from math import log2, ceil
 # Data format
 #
 # Header contains number of keys and key to value map. Zero key is implicit as its value is always 0.
-# B0: reserved
-# B1: number of keys
-# B2-3: key 1 value
-# B4-5: key 2 value
+# 1B: reserved
+# 1B: number of keys
+# 2B: key 1 value
+# 2B: key 2 value
 # ...
-# Data
+# 2B: compressed data
+# 1B: Data0
+# 1B: Data1
+# ..
+#
 # Bit packed key values. Final byte padded with 0's. Key width in bits is ceil(log2(number of keys))
 #
 # For example with 3 bit key (max. 7 possible values)
@@ -46,8 +50,14 @@ for line in args.input:
         m = linere.match(line)
         if not m:
             raise ValueError(f"Unknown line: {line}")
-        tones.append(int(m[1]))
-        durations.append(int(m[2]))
+        tone = int(m[1])
+        duration = int(m[2])
+        if duration > 1:
+            tones.append(tone)
+            durations.append(duration)
+            if duration < 20:
+                print(
+                    f"WARNING: short note {tone}Hz {duration}ms", file=sys.stderr)
 
 
 def compress(data):
@@ -135,12 +145,29 @@ def export_data_arrays(data, type):
     print(f"// Compression ratio {100*(1-ratio):0.1f}%%")
     keybits = ceil(log2(numvals))
     print(f"// {numvals} unique keys. Key size {keybits} bits")
+
+    # build data packet
+    data = []
+    for v in hdr:
+        data.append(v & 0xFF)
+        data.append((v >> 8) & 0xFF)
+    encdatalen = len(encdata)
+    data.append(encdatalen & 0xFF)
+    data.append((encdatalen >> 8) & 0xFF)
+    data += encdata
+
     print(
-        f"const uint16_t {args.prefix}{type}DataHdr[] PROGMEM = {{{','.join([hex(v) for v in hdr])}}};")
-    print(f"#define {args.prefix}{type}DataHdrSize {len(hdr)*2}")
-    print(
-        f"const uint8_t {args.prefix}{type}Data[] PROGMEM = {{{','.join([hex(v) for v in encdata])}}};")
-    print(f"#define {args.prefix}{type}DataSize {len(encdata)}")
+        f"const uint8_t {args.prefix}{type}[] PROGMEM = {{{','.join([hex(v) for v in data])}}};")
+    print(f"#define {args.prefix}{type}HdrSize {len(hdr)*2}")
+    print(f"#define {args.prefix}{type}EncSize {len(encdata)}")
+    print(f"#define {args.prefix}{type}Size {len(data)}")
+
+    # print(
+    #    f"const uint16_t {args.prefix}{type}DataHdr[] PROGMEM = {{{','.join([hex(v) for v in hdr])}}};")
+    # print(f"#define {args.prefix}{type}DataHdrSize {len(hdr)*2}")
+    # print(
+    #    f"const uint8_t {args.prefix}{type}Data[] PROGMEM = {{{','.join([hex(v) for v in encdata])}}};")
+    # print(f"#define {args.prefix}{type}DataSize {len(encdata)}")
 
 
 # Export header file
