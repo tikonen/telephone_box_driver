@@ -25,7 +25,7 @@ struct MelodyData {
     const uint8_t* durations;
 };
 
-const MelodyData melodyTable[] PROGMEM = {
+const MelodyData melodyTable[] = {
     //
     {mariowin_toneNotes, mariowin_toneDurations},    //
     {mk_toneNotes, mk_toneDurations},                //
@@ -37,8 +37,6 @@ const MelodyData melodyTable[] PROGMEM = {
     {sandstorm_toneNotes, sandstorm_toneDurations},  //
     {taps_toneNotes, taps_toneDurations},            //
 };
-
-void read_melody(MelodyData* dst, int idx) { memcpy_P(dst, melodyTable + idx, sizeof(MelodyData)); }
 
 #define wait_ms(ms) delay(ms)
 
@@ -459,6 +457,26 @@ void handle_state_wait(StateStage stage)
     static Timer2 idleTimeout(true, 300);
     static bool ring_enabled = false;
 
+#if 0
+    melody_init();
+    bool playing = true;
+    unsigned int midx = 0;
+    do {
+        serial_printfln("MELODY %d", midx);
+        melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
+        //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
+        while (melody_busy()) {
+            if (serial_read_line()) {
+                melody_stop();
+                playing = false;
+            }
+        }
+        midx++;
+        if (midx >= ARRAY_SIZE(melodyTable)) midx = 0;
+        delay(1000);
+    } while (playing);
+#endif
+
     uint32_t ts = millis();
 
     if (stage == ENTER) {
@@ -691,9 +709,7 @@ void handle_state_terminal(StateStage stage)
             unsigned int midx = 0;
             do {
                 serial_printfln("MELODY %d", midx);
-                MelodyData melody;
-                read_melody(&melody, midx);
-                melody_play_encoded(melody.tones, melody.durations);
+                melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
                 //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
                 while (melody_busy()) {
                     if (serial_read_line()) {
