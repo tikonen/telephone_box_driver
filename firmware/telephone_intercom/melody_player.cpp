@@ -5,15 +5,6 @@
 
 #define UNCOMPRESSED_PLAYER 0
 
-union CompressedMelodyHeader {
-    struct {
-        uint8_t numkeys;
-        uint8_t : 5;
-        uint8_t padding : 3;  // number of filler keys on the last byte
-    };
-    uint16_t b;
-};
-
 // Data format
 //
 // Header contains number of keys and key to value map. Zero key is implicit as its value is always 0.
@@ -35,7 +26,7 @@ union CompressedMelodyHeader {
 // [ k:3  |  k:1  |  k:0  | k:7   | k:4   | k:0   | ..
 //
 // byte sequence 0x64, 0x78 would be decoded to key value list 3, 1, 0, 7, 4, ...
-struct CompressedData {
+struct CompressedMelody {
     const uint16_t* hdrdata;
     const uint8_t* encdata;
     uint16_t len;
@@ -45,6 +36,16 @@ struct CompressedData {
     uint8_t avail;
     uint8_t keymask;
     uint8_t keybits;
+
+    union CompressedHeader {
+        struct {
+            uint8_t numkeys;
+            uint8_t : 5;
+            uint8_t padding : 3;  // number of filler keys on the last byte
+        };
+        uint16_t b;
+    };
+
 
     void init(const uint8_t* packet)
     {
@@ -56,48 +57,65 @@ struct CompressedData {
         keymask = 0;
         keybits = 1;
 
-        CompressedMelodyHeader hdr;
+        CompressedHeader hdr;
         hdr.b = pgm_read_word_near(hdrdata);
-        // compute keymask and number of bits
-        int tmp = 2;
-        while (tmp < hdr.numkeys) {
-            tmp *= 2;
-            keybits++;
-        }
-        keymask = tmp - 1;
 
-        // get data len and set pointer to start of encoded data
-        len = pgm_read_word_near(hdrdata + hdr.numkeys);
-        encdata = packet + 2 * (hdr.numkeys + 1);
+        if (hdr.numkeys == 0xFF) {
+            // data is uncompressed
+            len = pgm_read_word_near(packet + 1);
+            encdata = packet + 3;
+            keybits = 0;
+        } else {
+            // compute keymask and number of bits
+            int tmp = 2;
+            while (tmp < hdr.numkeys) {
+                tmp *= 2;
+                keybits++;
+            }
+            keymask = tmp - 1;
+
+            // get data len and set pointer to start of encoded data
+            len = pgm_read_word_near(hdrdata + hdr.numkeys);
+            encdata = packet + 2 * (hdr.numkeys + 1);
+        }
     }
 
     inline bool decode(uint16_t* outv)
     {
-        while (true) {
-            if (avail >= keybits) {
-                uint8_t key = enc >> (avail - keybits);
-                key &= keymask;
-                if (key) {
-                    *outv = pgm_read_word_near(hdrdata + key);
-                } else {
-                    *outv = 0;
+        if (keybits) {
+            while (true) {
+                if (avail >= keybits) {
+                    uint8_t key = enc >> (avail - keybits);
+                    key &= keymask;
+                    if (key) {
+                        *outv = pgm_read_word_near(hdrdata + key);
+                    } else {
+                        *outv = 0;
+                    }
+                    avail -= keybits;
+                    return true;
                 }
-                avail -= keybits;
+                if (idx < len) {
+                    enc <<= 8;
+                    enc |= pgm_read_byte_near(encdata + idx++);
+                    avail += 8;
+                    continue;
+                }
+                return false;
+            }
+        } else {
+            // uncompressed data
+            if (idx < len) {
+                *outv = pgm_read_word_near((uint16_t*)encdata + idx++);
                 return true;
             }
-            if (idx < len) {
-                enc <<= 8;
-                enc |= pgm_read_byte_near(encdata + idx++);
-                avail += 8;
-                continue;
-            }
-            return false;
         }
+        return false;
     }
 };
 
-static CompressedData melodyNotes;
-static CompressedData melodyDurations;
+static CompressedMelody melodyNotes;
+static CompressedMelody melodyDurations;
 
 struct PlainMelodyData {
     const uint16_t* notesData = NULL;

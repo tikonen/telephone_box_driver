@@ -69,8 +69,6 @@ def compress(data):
     keybits = ceil(log2(numvals))
     keymask = (1 << keybits) - 1
 
-    # print(f"{numvals} values. key bits {keybits}")
-
     # build value to key map
     keymap = {}
     key = 0
@@ -142,26 +140,42 @@ def export_data_arrays(data, type):
     hdr = [numvals | padding << 13]
     for k in sorted(valuemap.keys())[1:]:
         hdr.append(valuemap[k])
-    ratio = (2*len(hdr) + len(encdata))/(2*len(data))
-    print(f"// Compression ratio {100*(1-ratio):0.1f}%")
-    keybits = ceil(log2(numvals))
-    print(f"// {numvals} unique keys. Key size {keybits} bits")
+    ratio = (2 * len(hdr) + 2 + len(encdata))/(2*len(data))
 
-    # build data packet
-    data = []
-    for v in hdr:
-        data.append(v & 0xFF)
-        data.append((v >> 8) & 0xFF)
-    encdatalen = len(encdata)
-    data.append(encdatalen & 0xFF)
-    data.append((encdatalen >> 8) & 0xFF)
-    data += encdata
+    if ratio > 1:
+        newratio = (1 + 2 + (2*len(data)))/(2*len(data))
+        print(
+            f"// Uncompressed data. ratio {100*(1-newratio):0.1f}% (compression would be {100*(1-ratio):0.1f}%)")
+        # build data packet
+        packet = []
+        packet.append(0xFF)
+        encdatalen = len(data) * 2
+        for v in data:
+            packet.append(v & 0xFF)
+            packet.append((v >> 8) & 0xFF)
+        print(
+            f"const uint8_t {args.prefix}{type}[] PROGMEM = {{{','.join(['0x{:02x}'.format(v) for v in packet])}}};")
+    else:
+        print(f"// Compression ratio {100*(1-ratio):0.1f}%")
+        keybits = ceil(log2(numvals))
+        print(f"// {numvals} unique keys. Key size {keybits} bits")
 
-    print(
-        f"const uint8_t {args.prefix}{type}[] PROGMEM = {{{','.join([hex(v) for v in data])}}};")
-    print(f"#define {args.prefix}{type}HdrSize {len(hdr)*2}")
-    print(f"#define {args.prefix}{type}EncSize {len(encdata)}")
-    print(f"#define {args.prefix}{type}Size {len(data)}")
+        # build data packet
+        packet = []
+        for v in hdr:
+            packet.append(v & 0xFF)
+            packet.append((v >> 8) & 0xFF)
+        encdatalen = len(encdata)
+        packet.append(encdatalen & 0xFF)
+        packet.append((encdatalen >> 8) & 0xFF)
+        packet += encdata
+
+        print(
+            f"const uint8_t {args.prefix}{type}[] PROGMEM = {{{','.join(['0x{:02x}'.format(v) for v in packet])}}};")
+        print(f"#define {args.prefix}{type}HdrSize {len(hdr)*2}")
+        print(f"#define {args.prefix}{type}EncSize {len(encdata)}")
+
+    print(f"#define {args.prefix}{type}Size {len(packet)}")
 
     # print(
     #    f"const uint16_t {args.prefix}{type}DataHdr[] PROGMEM = {{{','.join([hex(v) for v in hdr])}}};")
@@ -172,7 +186,7 @@ def export_data_arrays(data, type):
 
 
 # Export header file
-print("# pragma once")
-print("// clang-format off")
+print("#pragma once")
+# print("// clang-format off")
 export_data_arrays(tones, "toneNotes")
 export_data_arrays(durations, "toneDurations")
