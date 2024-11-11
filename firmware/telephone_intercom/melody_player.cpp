@@ -5,13 +5,16 @@
 
 #define UNCOMPRESSED_PLAYER 0
 
+//
+// Decode bit-packed lookup-table compressed data.
+//
 // Data format
 //
 // Header contains number of keys and key to value map. Zero key is implicit as its value is always 0.
 // 1B: reserved
 // 1B: number of keys
-// 2B: key 1 value
-// 2B: key 2 value
+// 2B: key 1 16-bit value
+// 2B: key 2 16-bit value
 // ...
 // 2B: compressed data
 // 1B: Data0
@@ -26,7 +29,9 @@
 // [ k:3  |  k:1  |  k:0  | k:7   | k:4   | k:0   | ..
 //
 // byte sequence 0x64, 0x78 would be decoded to key value list 3, 1, 0, 7, 4, ...
-struct CompressedMelody {
+// Decode looks up the values from the header table.
+//
+struct CompressedData {
     const uint16_t* hdrdata;
     const uint8_t* encdata;
     uint16_t len;
@@ -85,6 +90,7 @@ struct CompressedMelody {
         if (keybits) {
             while (true) {
                 if (avail >= keybits) {
+                    // TODO Check padding value for the last bytes. Extra values due to byte padding are currently returned as 0.
                     uint8_t key = enc >> (avail - keybits);
                     key &= keymask;
                     if (key) {
@@ -114,10 +120,21 @@ struct CompressedMelody {
     }
 };
 
-static CompressedMelody melodyNotes;
-static CompressedMelody melodyDurations;
+struct CompressedMelody {
+    CompressedData notes;
+    CompressedData durations;
 
-struct PlainMelodyData {
+    void init(const uint8_t* toneData, const uint8_t* durationsData)
+    {
+        notes.init(toneData);
+        durations.init(durationsData);
+    }
+    inline bool decode(uint16_t* note, uint16_t* duration) { return notes.decode(note) && durations.decode(duration); }
+};
+
+static CompressedMelody encodedMelody;
+
+struct PlainMelody {
     const uint16_t* notesData = NULL;
     const uint16_t* durationsData = NULL;
     uint16_t len = 0;
@@ -144,7 +161,7 @@ struct PlainMelodyData {
 };
 
 #if UNCOMPRESSED_PLAYER
-static PlainMelodyData plainMelody;
+static PlainMelody plainMelody;
 #endif
 
 void melody_init()
@@ -176,9 +193,12 @@ void melody_stop()
     tone_set(0);
 }
 
+static uint16_t elapsedms = 0;
+static uint16_t noteDurationms = 0;
+
 #if UNCOMPRESSED_PLAYER
 static bool plain_decode(uint16_t* tone, uint16_t* delay) { return plainMelody.decode(tone, delay); }
-static bool compressed_decode(uint16_t* tone, uint16_t* delay) { return melodyNotes.decode(tone) && melodyDurations.decode(delay); }
+static bool compressed_decode(uint16_t* tone, uint16_t* delay) { return encodedMelody.decode(tone, delay); }
 
 static bool (*decoder)(uint16_t* tone, uint16_t* delay);
 
@@ -214,24 +234,21 @@ void melody_play_blocking(const uint16_t* notes, const uint16_t* durations, int 
     tone_set(0);
 }
 #else
-static inline bool decoder(uint16_t* tone, uint16_t* delay) { return melodyNotes.decode(tone) && melodyDurations.decode(delay); }
+static inline bool decoder(uint16_t* tone, uint16_t* delay) { return encodedMelody.decode(tone, delay); }
 #endif
-
-static uint16_t elapsedms = 0;
-static uint16_t noteDurationms = 0;
 
 void melody_play_encoded(const uint8_t* toneData, const uint8_t* durationsData)
 {
     melody_stop();
 
-    melodyNotes.init(toneData);
-    melodyDurations.init(durationsData);
+    encodedMelody.init(toneData, durationsData);
 
     elapsedms = 0;
     noteDurationms = 0;
 
 #if UNCOMPRESSED_PLAYER
     decoder = compressed_decode;
+    // decoder = [](uint16_t* tone, uint16_t* delay) { return encodedMelody.decode(tone, delay); };
 #endif
     // overflow interrupt enable
     TIMSK2 = _BV(TOIE2);

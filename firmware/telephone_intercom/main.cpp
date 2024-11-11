@@ -113,6 +113,28 @@ bool setLineState(int line, LineState newState)
 #define dialtone_enable() pwm_dac_enable()
 #define dialtone_disable() pwm_dac_disable()
 
+void play_loop()
+{
+    melody_init();
+    bool playing = true;
+    unsigned int midx = 0;
+    do {
+        serial_printfln("MELODY %d", midx);
+        melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
+        //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
+        while (melody_busy()) {
+            if (serial_read_line()) {
+                melody_stop();
+                playing = false;
+            }
+        }
+        midx++;
+        if (midx >= ARRAY_SIZE(melodyTable)) midx = 0;
+        delay(1000);
+    } while (playing);
+    dialtone_init();
+}
+
 // static bool runSelfTest();
 
 void setup()
@@ -458,23 +480,7 @@ void handle_state_wait(StateStage stage)
     static bool ring_enabled = false;
 
 #if 0
-    melody_init();
-    bool playing = true;
-    unsigned int midx = 0;
-    do {
-        serial_printfln("MELODY %d", midx);
-        melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
-        //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
-        while (melody_busy()) {
-            if (serial_read_line()) {
-                melody_stop();
-                playing = false;
-            }
-        }
-        midx++;
-        if (midx >= ARRAY_SIZE(melodyTable)) midx = 0;
-        delay(1000);
-    } while (playing);
+    play_loop();
 #endif
 
     uint32_t ts = millis();
@@ -704,24 +710,7 @@ void handle_state_terminal(StateStage stage)
             setState(STATE_WAIT);
             return;
         } else if (!strcmp(cmd, "MELODY")) {
-            melody_init();
-            bool playing = true;
-            unsigned int midx = 0;
-            do {
-                serial_printfln("MELODY %d", midx);
-                melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
-                //  melody_play(monkeyisland_notes, monkeyisland_noteDurations, monkeyisland_noteCount);
-                while (melody_busy()) {
-                    if (serial_read_line()) {
-                        melody_stop();
-                        playing = false;
-                    }
-                }
-                midx++;
-                if (midx >= ARRAY_SIZE(melodyTable)) midx = 0;
-                delay(1000);
-            } while (playing);
-            dialtone_init();
+            play_loop();
             dialtone_disable();
 
         } else {
