@@ -113,6 +113,13 @@ bool setLineState(int line, LineState newState)
 #define dialtone_enable() pwm_dac_enable()
 #define dialtone_disable() pwm_dac_disable()
 
+void play_once(int midx)
+{
+    melody_init();
+    melody_play_encoded(melodyTable[midx].tones, melodyTable[midx].durations);
+    dialtone_init();
+}
+
 void play_loop()
 {
     melody_init();
@@ -272,9 +279,10 @@ void handle_state_idle(StateStage stage)
             digitalWrite(relayPins[line], LOW);
         }
         wait_ms(RELAY_DELAY_MS);  // let relays release
+
         serial_clear();
         serial_println("READY");
-        waitTimer.reset(ts);
+        waitTimer.reset(millis());
     }
 
     if (stage == EXECUTE) {

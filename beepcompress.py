@@ -1,35 +1,42 @@
+"""
+beepcompress.py
+
+Compresses raw export data from beep.sh for efficient storage and playback.
+
+Usage:
+    $ BEEP_EXPORT_RAW=1 ./beeps-master/sandstorm.sh | python beepcompress.py -p sandstorm_
+
+Data Format:
+-------------
+The output consists of a header and compressed data:
+
+Header:
+    - 1 byte: Reserved
+    - 1 byte: Number of unique keys (distinct values)
+    - 2 bytes each: Value for each key (excluding zero, which is implicit)
+
+Compressed Data:
+    - Bit-packed key indices, where each key index is encoded using ceil(log2(number of keys)) bits.
+    - The final byte is padded with zeros if necessary.
+
+Example (3-bit keys, up to 7 possible values):
+    Byte sequence: 0x64, 0x78
+    Bit stream:    011 001 000 111 100 000 ...
+    Decoded keys:  [3, 1, 0, 7, 4, 0, ...]
+
+Notes:
+    - The header maps key indices to their actual values.
+    - Zero key represents value 0.
+    - If compression is not efficient, the script outputs uncompressed data instead.
+
+"""
+
 #!python
 
 import argparse
 import sys
 import re
 from math import log2, ceil
-
-# Compresses raw export data from beep.sh
-#
-# $ BEEP_EXPORT_RAW=1 ./beeps-master/sandstorm.sh | python beepcompress.py -p sandstorm_
-#
-# Data format
-#
-# Header contains number of keys and key to value map. Zero key is implicit as its value is always 0.
-# 1B: reserved
-# 1B: number of keys
-# 2B: key 1 value
-# 2B: key 2 value
-# ...
-# 2B: compressed data
-# 1B: Data0
-# 1B: Data1
-# ..
-#
-# Bit packed key values. Final byte padded with 0's. Key width in bits is ceil(log2(number of keys))
-#
-# For example with 3 bit key (max. 7 possible values)
-# [       byte 0x64   |        byte 0x78    | ..
-# [0 1 1 | 0 0 1 | 0 0 0 | 1 1 1 | 1 0 0 | 0 0 0 | ...
-# [ k:3  |  k:1  |  k:0  | k:7   | k:4   | k:0   | ..
-#
-# byte sequence 0x64, 0x78 would be decoded to key value list 3, 1, 0, 7, 4, ...
 
 parser = argparse.ArgumentParser(description='Beep compressor')
 parser.add_argument('-v', '--verbose', default=0,
@@ -148,7 +155,7 @@ def export_data_arrays(data, type):
             f"// Uncompressed data. ratio {100*(1-newratio):0.1f}% (compression would be {100*(1-ratio):0.1f}%)")
         # build data packet
         packet = []
-        packet.append(0xFF)
+        packet.append(0xFF) # 255 as number of unique keys indicates uncompressed data
         encdatalen = len(data) * 2
         for v in data:
             packet.append(v & 0xFF)
