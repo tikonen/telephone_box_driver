@@ -1,0 +1,17 @@
+# Model file
+# Kungliga Telegrafsverket 1930s
+
+# Mode 0: Phone has no support for dialing
+# Mode 1: Normal rotary dialing (1 is first, 0 is last)
+# Mode 2: Normal rotary dialing (0 is first, 9 is last)
+DM:2
+
+# On-hook threshold voltage level as sensed by 47 Ohm resistor.
+TON: 0.15
+
+# Off-hook threshold voltage level as sensed by 47 Ohm resistor.
+# TOFF: 1.5
+
+# Ringing frequency
+# HZ:25
+

@@ -55,11 +55,12 @@ enum StateStage { ENTER, EXECUTE, LEAVE };
 #define RING_CADENCE_ON_MS 2000
 #define RING_CADENCE_OFF_MS 2000
 
-#define DIAL_MODE_NONE 0
-#define DIAL_MODE_SINGLE 1
+#define DIAL_MODE_NONE 0  // No dial processing
+#define DIAL_MODE_STANDARD 1
+#define DIAL_MODE_ZERO_IS_FIRST 2
 
 static struct Configuration {
-    int dialMode = DIAL_MODE_SINGLE;
+    int dialMode = DIAL_MODE_STANDARD;
     float onHookThreshold = LSENSE_ONHOOK_V;
     float offHookThreshold = LSENSE_OFFHOOK_V;
     int ringFreq = RING_FREQ_HZ;
@@ -147,8 +148,25 @@ LineState readLineState()
 
 bool updateLineState()
 {
+    static uint32_t lastUpdateTs = 0;
+    static LineState nextState = LINE_STATE_UNKNOWN;
     LineState state = readLineState();
-    return setLineState(state);
+
+    if (sLineState == state) {
+        return setLineState(state);
+    } else {
+        if (state != nextState) {
+            // Line state has changed. Start debounce timer
+            nextState = state;
+            lastUpdateTs = millis();
+        } else if (millis() - lastUpdateTs > 10) {
+            // Line state has been stable for a while, update it
+            bool ret = setLineState(state);
+            nextState = LINE_STATE_UNKNOWN;
+            return ret;
+        }
+    }
+    return false;
 }
 
 // Test assumes that phone is on-hook
@@ -526,8 +544,9 @@ void handle_state_wait(StateStage stage)
                 if (shortTimer.update(ts)) {
                     // Line has been shorted for long enough. Dial begins
                     switch (config.dialMode) {
-                        case DIAL_MODE_SINGLE: setState(STATE_DIAL); break;
-                        case DIAL_MODE_NONE:  // ignore
+                        case DIAL_MODE_ZERO_IS_FIRST:  // fallthrough
+                        case DIAL_MODE_STANDARD: setState(STATE_DIAL); break;
+                        case DIAL_MODE_NONE:           // ignore
                         default: break;
                     }
                     return;
@@ -593,17 +612,18 @@ void handle_state_dial(StateStage stage)
                 // Digit pulses have started, count them.
                 int dialPulses = 0;
                 Timer2 waitTimer(true, 50);
-
+                // uint32_t ts = millis();
                 do {
                     waitTimer.reset();
                     // Line is on-hook (open).
                     while (!waitTimer.update())
                         ;
 
-                    // wait until line shorts. This indicates a dial pulse
+                    // wait until line shorts. This indicates a start of dial pulse
                     while (!waitTimer.update()) {
                         updateLineState();
                         if (sLineState == LINE_STATE_SHORT) {
+                            // printf("% 4u: SHORT (PULSE)\r\n", millis() - ts);
                             dialPulses++;
                             break;
                         }
@@ -612,14 +632,23 @@ void handle_state_dial(StateStage stage)
                     waitTimer.reset();
                     while (!waitTimer.update()) {
                         updateLineState();
-                        if (sLineState == LINE_STATE_ON_HOOK) break;
+                        if (sLineState == LINE_STATE_ON_HOOK) {
+                            // printf("% 4u: ON_HOOK\r\n", millis() - ts);
+                            break;
+                        }
                     }
 
                 } while (sLineState == LINE_STATE_ON_HOOK);
 
                 if (dialPulses > 0 && dialPulses <= 10) {
-                    // print out dialed number
-                    if (dialPulses == 10) dialPulses = 0;
+                    // print out dialed number (1-10, where 10 typically means digit 0)
+                    if(config.dialMode == DIAL_MODE_ZERO_IS_FIRST) {
+                        dialPulses = dialPulses - 1;
+                    } else {
+                        if (dialPulses == 10) {
+                            dialPulses = 0;
+                        }
+                    }
                     serial_printf("DIAL %d", dialPulses);
                     setState(STATE_WAIT);
                 } else {

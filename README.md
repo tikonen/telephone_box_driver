@@ -35,4 +35,11 @@ Package `telephonebox` is a low level interface for the Telephone Box serial int
 	```
 
 ### Troubleshooting
-In connection errors you may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for clone Arduino Nano compatibility. In case of clone Arduino Nano board that uses a fake CH340 chip see the following pages for possible solutions. https://github.com/SHWotever/SimHub/wiki/Arduino---Counterfeit-Fake-CH340G-chips-driver-issues and https://github.com/SHWotever/FakeCH340DriverFixer/
+In connection errors you may need to install [CH340 driver](http://www.wch-ic.com/downloads/CH341SER_ZIP.html) for clone Arduino Nano compatibility. 
+
+    ```serial.serialutil.SerialException: Cannot configure port, something went wrong. Original message: PermissionError(13, 'A device attached to the system is not functioning.', None, 31)
+    ```
+
+In case of clone Arduino Nano board that uses a fake CH340 chip see the following pages for possible solutions. https://github.com/SHWotever/SimHub/wiki/Arduino---Counterfeit-Fake-CH340G-chips-driver-issues and https://github.com/SHWotever/FakeCH340DriverFixer/
+
+CH340 Driver version 04/11/2011 3.3.2011.11  seems to work fine with the counterfeit chips.

@@ -1,7 +1,7 @@
 
 Run script to detect DTMF numbers dialed in DTMF_dialing.ogg file
 
-$ python3 detect.py DTMF_Dialing_8kHz.ogg
+$ python3 dtmf_detect.py DTMF_Dialing_8kHz.ogg
 0.502s SIGNAL ON
 0.580875s SIGNAL OFF
 697 0.00
@@ -19,7 +19,7 @@ SYMBOL:"0" (941Hz, 1336Hz)
 
 Grep only numbers
 
-$ python3 detect.py DTMF_Dialing_8kHz.ogg | grep DIAL
+$ python3 dtmf_detect.py DTMF_Dialing_8kHz.ogg | grep DIAL
 DIAL 0696675356
 DIAL 4646415180
 DIAL 2336731416

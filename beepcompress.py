@@ -11,9 +11,13 @@ Data Format:
 The output consists of a header and compressed data:
 
 Header:
-    - 1 byte: Reserved
-    - 1 byte: Number of unique keys (distinct values)
-    - 2 bytes each: Value for each key (excluding zero, which is implicit)
+    - 1 byte: Number Nk of unique keys (distinct values)
+    - 1 byte: Padding
+        bits [0-4] Reserved
+        bits [5-7] number of padding keys added at the end of encoded data
+    - (Nk - 1) * 2 bytes : 16-bit value for each key (excluding zero, which is implicit)
+    - 2 bytes: Length L of compressed data in bytes
+
 
 Compressed Data:
     - Bit-packed key indices, where each key index is encoded using ceil(log2(number of keys)) bits.

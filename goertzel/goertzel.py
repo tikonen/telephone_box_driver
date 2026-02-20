@@ -1,7 +1,14 @@
-from math import sin, cos, pi
+from math import cos, pi
 
 
 class Goertzel():
+    """Goertzel algorithm implementation for detecting specific frequencies in a signal.
+
+    f -- Target frequency to detect
+    N -- Number of samples to process
+    Fs -- Sampling rate of the signal
+
+    """
     def __init__(self, f, N, Fs):
         self.k = int(0.5 + N * f/Fs)
         self.w = 2 * pi * self.k / N
@@ -62,17 +69,9 @@ def goertzel(f, x, N, Fs):
 
 
 def main():
+    """Simple test of Goertzel algorithm implementation."""
     import matplotlib.pyplot as plt
-    from dtmf import tone
-
-    FREQ_LOW1 = 697
-    FREQ_LOW2 = 770
-    FREQ_LOW3 = 852
-    FREQ_LOW4 = 941
-    FREQ_HIGH1 = 1209
-    FREQ_HIGH2 = 1336
-    FREQ_HIGH3 = 1477
-    FREQ_HIGH4 = 1633
+    from dtmf import tone, FREQ_LOW2, FREQ_HIGH2
 
     Fs = 8000  # sample rate (Hz).
     # Sample rate must be at least 2 times the target frequency (Fs > 2 * f)
@@ -93,7 +92,7 @@ def main():
     plt.figure(1)
     # plt.plot(t[:int(0.01*Fs)+1], x[:int(0.01*Fs)+1])
     plt.plot(t, x)
-    plt.title(f'{f1}Hz + {f2}Hz')
+    plt.title(f'Low2 {f1}Hz + High2 {f2}Hz')
     # plt.plot(t, x)
     # plt.show()
     # print(x[:int(0.001*Fs)+1])

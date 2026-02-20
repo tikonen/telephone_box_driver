@@ -28,22 +28,10 @@ SYMBOLS = [  # 0, 1, ... 9, #, *
     ('#', (FREQ_LOW4, FREQ_HIGH3))
 ]
 
-ALL_SYMBOLS = [  # 0, 1, ... 9, #, *, A, B, C, D
-    ('1', (FREQ_LOW1, FREQ_HIGH1)),
-    ('2', (FREQ_LOW1, FREQ_HIGH2)),
-    ('3', (FREQ_LOW1, FREQ_HIGH3)),
+ALL_SYMBOLS = SYMBOLS + [  # A, B, C, D
     ('A', (FREQ_LOW1, FREQ_HIGH4)),
-    ('4', (FREQ_LOW2, FREQ_HIGH1)),
-    ('5', (FREQ_LOW2, FREQ_HIGH2)),
-    ('6', (FREQ_LOW2, FREQ_HIGH3)),
     ('B', (FREQ_LOW2, FREQ_HIGH4)),
-    ('7', (FREQ_LOW3, FREQ_HIGH1)),
-    ('8', (FREQ_LOW3, FREQ_HIGH2)),
-    ('9', (FREQ_LOW3, FREQ_HIGH3)),
     ('C', (FREQ_LOW3, FREQ_HIGH4)),
-    ('*', (FREQ_LOW4, FREQ_HIGH1)),
-    ('0', (FREQ_LOW4, FREQ_HIGH2)),
-    ('#', (FREQ_LOW4, FREQ_HIGH3)),
     ('D', (FREQ_LOW4, FREQ_HIGH4))
 ]
 

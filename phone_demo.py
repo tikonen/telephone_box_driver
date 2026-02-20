@@ -204,16 +204,17 @@ def main():
     verbose_level = args.verbose
 
     # print audio devices
-    device = sd.query_devices(kind='output')
-    if device:
-        print(f'AUDIO OUTPUT: {device["name"]}')
-    else:
-        print("WARNING: No output audio device")
-    device = sd.query_devices(kind='input')
-    if device:
-        print(f'AUDIO INPUT: {device["name"]}')
-    else:
-        print("WARNING: No input audio device")
+    #try:
+    #    device = sd.query_devices(kind='output')
+    #    print(f'AUDIO OUTPUT: {device["name"]}')
+    #except Exception:
+    #    print("WARNING: No output audio device")
+#
+    #try:
+    #    device = sd.query_devices(kind='input')
+    #    print(f'AUDIO INPUT: {device["name"]}')
+    #except Exception:
+    #    print("WARNING: No input audio device")
 
     driver = create_device_driver(verbose_level, args.port, args.model)
 
